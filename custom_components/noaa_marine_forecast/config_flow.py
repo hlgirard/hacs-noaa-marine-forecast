@@ -79,7 +79,7 @@ class MarineForecastConfigFlow(ConfigFlow, domain=DOMAIN):
                 await self.async_set_unique_id(zone_id.lower())
                 self._abort_if_unique_id_configured()
                 title = f"{name} {zone_id}"
-                self._context["title_placeholders"] = {"zone": zone_id}
+                self.context["title_placeholders"] = {"zone": zone_id}
                 return self.async_create_entry(
                     title=title, data={CONF_ZONE_ID: zone_id, CONF_NAME: name}
                 )
