@@ -1,0 +1,12 @@
+# Development dependencies for the real-Home-Assistant test tier.
+#
+#   uv venv --python 3.14 .venv
+#   uv pip install --python .venv/bin/python -r requirements-dev.txt
+#
+# This package pins homeassistant exactly, so the two move together: upgrade
+# one and you must upgrade the other. The pinned Home Assistant version should
+# be kept in step with the version running in your Home Assistant instance,
+# otherwise these tests describe an installation you are not running.
+#
+# Current pin: homeassistant 2026.9.3
+pytest-homeassistant-custom-component==0.13.366

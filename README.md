@@ -159,13 +159,49 @@ elements:
 
 ## Development
 
+The test suite runs in two tiers.
+
+### Fast tier
+
 ```bash
-python -m unittest discover -s tests -t . -v
+make test          # or: python3 -m unittest discover -s tests -t . -v
 ```
 
-The forecast parser (`parser.py`), flag model (`flags.py`), alert
-normalization (`alerts.py`) and asset loading (`assets.py`) are free of
-Home Assistant imports so they can be tested standalone.
+No dependencies and no Home Assistant. The forecast parser (`parser.py`), flag
+model (`flags.py`), alert normalization (`alerts.py`) and asset loading
+(`assets.py`) are free of Home Assistant imports so they can be tested
+standalone; `homeassistant`, `aiohttp` and `voluptuous` are stubbed for the
+modules that need them, so this tier also catches import and missing-name errors
+before anything is deployed.
+
+### Real Home Assistant tier
+
+```bash
+make venv          # one-time: Python 3.14 + requirements-dev.txt
+make test-ha       # or: .venv/bin/pytest
+```
+
+This tier runs the entity, config flow and coordinator code against a real
+Home Assistant install via `pytest-homeassistant-custom-component`, which is
+what exercises the paths the fast tier can only inspect statically: the
+`available` contract, state writes, image bytes, form validation and the config
+entry state machine. NOAA HTTP is mocked, so the suite is offline and
+deterministic.
+
+Home Assistant 2026.9 requires Python 3.14. `pytest-homeassistant-custom-component`
+pins an exact `homeassistant` version, so the two are upgraded together; keep
+the pin in step with the Home Assistant version you actually run, or these
+tests will describe an installation you are not running.
+
+### Both
+
+```bash
+make test-all
+```
+
+A live Home Assistant instance is still the final check for anything the tiers
+cannot see: manifest and translation loading by the integration loader, and
+the flag image actually being served over HTTP.
 
 ## Disclaimer
 

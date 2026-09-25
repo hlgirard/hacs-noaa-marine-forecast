@@ -143,7 +143,7 @@ class MarineFlagImage(ImageEntity):
         self._lifecycle = lifecycle
         self._attr_content_type = image.content_type
         self._attr_image_last_updated = datetime.now(UTC)
-        return True
+        return self._flag_changed()
 
     def _flag_changed(self) -> bool:
         """Return True when the displayed flag differs from the last state."""
