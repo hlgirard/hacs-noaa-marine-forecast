@@ -17,6 +17,7 @@ import homeassistant.helpers.config_validation as cv
 from .api import NOAAForecastError, async_fetch_forecast, forecast_url
 from .const import (
     CONF_NAME,
+    CONF_SCAN_INTERVAL,
     CONF_ZONE_ID,
     DEFAULT_NAME,
     DEFAULT_SCAN_INTERVAL_MINUTES,
@@ -113,13 +114,13 @@ class MarineForecastOptionsFlow(OptionsFlow):
 
         current = self._entry.data.get(CONF_NAME, DEFAULT_NAME)
         interval = self._entry.options.get(
-            "scan_interval", DEFAULT_SCAN_INTERVAL_MINUTES
+            CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_MINUTES
         )
         schema = vol.Schema(
             {
                 vol.Optional(CONF_NAME, default=current): cv.string,
                 vol.Optional(
-                    "scan_interval", default=interval
+                    CONF_SCAN_INTERVAL, default=interval
                 ): vol.All(cv.positive_int, vol.Coerce(int)),
             }
         )

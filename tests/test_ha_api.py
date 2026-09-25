@@ -99,6 +99,79 @@ class TestConfigFlowTitlePlaceholders(unittest.TestCase):
         )
 
 
+class TestCoordinatorImplementsUpdateMethod(unittest.TestCase):
+    """The coordinator must actually implement ``_async_update_data``.
+
+    A bare ``DataUpdateCoordinator`` whose update method is never bound raises
+    ``NotImplementedError`` on the first refresh, which only surfaces when the
+    entry is set up. These assertions check the wiring statically.
+    """
+
+    @staticmethod
+    def _coordinator_class() -> ast.ClassDef:
+        tree = ast.parse(
+            (COMPONENT / "coordinator.py").read_text(), filename="coordinator.py"
+        )
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef) and any(
+                isinstance(base, ast.Subscript)
+                and isinstance(base.value, ast.Name)
+                and base.value.id == "DataUpdateCoordinator"
+                for base in node.bases
+            ):
+                return node
+        raise AssertionError(
+            "coordinator.py must define a DataUpdateCoordinator subclass"
+        )
+
+    def test_subclasses_data_update_coordinator(self) -> None:
+        self._coordinator_class()
+
+    def test_overrides_async_update_data(self) -> None:
+        methods = {
+            node.name: node
+            for node in self._coordinator_class().body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        }
+        self.assertIn(
+            "_async_update_data",
+            methods,
+            "the coordinator subclass must define _async_update_data",
+        )
+        self.assertIsInstance(
+            methods["_async_update_data"],
+            ast.AsyncFunctionDef,
+            "_async_update_data must be async",
+        )
+
+    def test_factory_does_not_build_the_base_class(self) -> None:
+        """The factory must instantiate the subclass, not the base class."""
+        tree = ast.parse(
+            (COMPONENT / "coordinator.py").read_text(), filename="coordinator.py"
+        )
+        factory = None
+        for node in tree.body:
+            if (
+                isinstance(node, ast.AsyncFunctionDef)
+                and node.name == "async_setup_coordinator"
+            ):
+                factory = node
+        self.assertIsNotNone(factory, "async_setup_coordinator is missing")
+        assert factory is not None
+        called = {
+            node.func.id
+            for node in ast.walk(factory)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        }
+        self.assertNotIn(
+            "DataUpdateCoordinator",
+            called,
+            "async_setup_coordinator must instantiate the coordinator "
+            "subclass so its _async_update_data is used",
+        )
+        self.assertIn("MarineForecastCoordinator", called)
+
+
 class TestNoHomeAssistantImportInPureModules(unittest.TestCase):
     """Pure modules must stay importable without Home Assistant."""
 

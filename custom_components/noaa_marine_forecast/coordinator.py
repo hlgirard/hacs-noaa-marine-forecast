@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -31,6 +31,8 @@ _LOGGER = logging.getLogger(__name__)
 
 UTC = timezone.utc
 
+CONF_SCAN_INTERVAL = "scan_interval"
+
 
 @dataclass(frozen=True)
 class MarineZoneData:
@@ -55,35 +57,40 @@ class MarineZoneData:
         return lookup.get((base + timedelta(days=offset_days), part))
 
 
-async def async_setup_coordinator(
-    hass: HomeAssistant, entry: ConfigEntry
-) -> DataUpdateCoordinator[MarineZoneData]:
-    """Create the coordinator for a config entry."""
-    zone_id = entry.data[CONF_ZONE_ID]
-    raw_interval = entry.options.get(
-        "scan_interval",
-        entry.data.get("scan_interval", DEFAULT_SCAN_INTERVAL_MINUTES),
-    )
-    interval = timedelta(minutes=max(int(raw_interval), MIN_SCAN_INTERVAL_MINUTES))
-    coordinator: DataUpdateCoordinator[MarineZoneData] = DataUpdateCoordinator(
-        hass,
-        _LOGGER,
-        name=f"{DEFAULT_NAME} {zone_id}",
-        update_interval=interval,
-        config_entry=entry,
-    )
+class MarineForecastCoordinator(DataUpdateCoordinator[MarineZoneData]):
+    """Coordinator for a single marine zone."""
 
-    # Retained across refreshes so a failed alert request never silently
-    # clears an in-force marine warning.
-    last_alerts: AlertBundle | None = None
-    last_alerts_at: datetime | None = None
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        """Initialize the coordinator for a config entry."""
+        self.zone_id: str = entry.data[CONF_ZONE_ID]
+        # Retained across refreshes so a failed alert request never silently
+        # clears an in-force marine warning.
+        self._last_alerts: AlertBundle | None = None
+        self._last_alerts_at: datetime | None = None
 
-    async def _async_update_data() -> MarineZoneData:
-        nonlocal last_alerts, last_alerts_at
+        raw_interval = entry.options.get(
+            CONF_SCAN_INTERVAL,
+            entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_MINUTES),
+        )
+        super().__init__(
+            hass,
+            _LOGGER,
+            name=f"{DEFAULT_NAME} {self.zone_id}",
+            update_interval=timedelta(
+                minutes=max(int(raw_interval), MIN_SCAN_INTERVAL_MINUTES)
+            ),
+            config_entry=entry,
+        )
+
+    async def _async_update_data(self) -> MarineZoneData:
+        """Fetch the forecast and alerts for the configured zone."""
+        zone_id = self.zone_id
         try:
-            forecast_text = await async_fetch_forecast(hass, zone_id)
+            forecast_text = await async_fetch_forecast(self.hass, zone_id)
         except NOAAForecastError as err:
-            raise UpdateFailed(f"Error fetching forecast for {zone_id}: {err}") from err
+            raise UpdateFailed(
+                f"Error fetching forecast for {zone_id}: {err}"
+            ) from err
 
         product = parse_forecast(forecast_text, zone_id)
         if not product.periods:
@@ -97,8 +104,8 @@ async def async_setup_coordinator(
         zone_props: list[dict] = []
         alerts_available = True
         try:
-            active_props = await async_fetch_alerts(hass, zone_id)
-            zone_props = await async_fetch_zone_alerts(hass, zone_id)
+            active_props = await async_fetch_alerts(self.hass, zone_id)
+            zone_props = await async_fetch_zone_alerts(self.hass, zone_id)
         except NOAAForecastError as err:
             # The forecast is still useful without alerts, so keep the last
             # known alert state rather than reporting a false "all clear".
@@ -107,13 +114,16 @@ async def async_setup_coordinator(
 
         fetched_at = datetime.now(UTC)
         if alerts_available:
-            last_alerts = build_alert_bundle(active_props, zone_props, fetched_at)
-            last_alerts_at = fetched_at
-        bundle = last_alerts or build_alert_bundle([], [], fetched_at)
+            self._last_alerts = build_alert_bundle(
+                active_props, zone_props, fetched_at
+            )
+            self._last_alerts_at = fetched_at
+        bundle = self._last_alerts or build_alert_bundle([], [], fetched_at)
+
         now_period, next_period, method = select_now_next(
             product,
             fetched_at,
-            dt_util.get_time_zone(hass.config.time_zone),
+            dt_util.get_time_zone(self.hass.config.time_zone),
         )
         return MarineZoneData(
             zone_id=zone_id,
@@ -124,11 +134,22 @@ async def async_setup_coordinator(
             selection_method=method,
             fetched_at=fetched_at,
             alerts_available=alerts_available,
-            alerts_updated_at=last_alerts_at,
+            alerts_updated_at=self._last_alerts_at,
         )
 
+
+async def async_setup_coordinator(
+    hass: HomeAssistant, entry: ConfigEntry
+) -> MarineForecastCoordinator:
+    """Create and first-refresh the coordinator for a config entry."""
+    coordinator = MarineForecastCoordinator(hass, entry)
     await coordinator.async_config_entry_first_refresh()
     return coordinator
 
 
-__all__ = ["DOMAIN", "MarineZoneData", "async_setup_coordinator"]
+__all__ = [
+    "DOMAIN",
+    "MarineForecastCoordinator",
+    "MarineZoneData",
+    "async_setup_coordinator",
+]
