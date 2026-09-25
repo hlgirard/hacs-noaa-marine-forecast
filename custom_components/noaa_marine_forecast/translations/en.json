@@ -1,0 +1,94 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "NOAA Marine Forecast",
+        "description": "Add a NOAA coastal marine forecast zone, for example ANZ230.",
+        "data": {
+          "zone_id": "Marine zone ID",
+          "name": "Name"
+        }
+      }
+    },
+    "error": {
+      "invalid_zone": "Unable to load a marine forecast for that zone. Check the zone ID and try again."
+    },
+    "abort": {
+      "already_configured": "This marine zone is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "NOAA Marine Forecast options",
+        "data": {
+          "name": "Name",
+          "scan_interval": "Update interval (minutes, minimum 1)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "conditions_now": {
+        "name": "Conditions Now"
+      },
+      "conditions_next": {
+        "name": "Conditions Next"
+      },
+      "conditions_today": {
+        "name": "Conditions Today"
+      },
+      "conditions_tonight": {
+        "name": "Conditions Tonight"
+      },
+      "conditions_tomorrow": {
+        "name": "Conditions Tomorrow"
+      },
+      "conditions_tomorrow_night": {
+        "name": "Conditions Tomorrow Night"
+      },
+      "alert_flags": {
+        "name": "Alert Flags"
+      },
+      "active_alerts": {
+        "name": "Active Alerts"
+      },
+      "pending_alerts": {
+        "name": "Pending Alerts"
+      },
+      "alert_summary": {
+        "name": "Alert Summary"
+      },
+      "zone_name": {
+        "name": "Zone Name"
+      },
+      "forecast_office": {
+        "name": "Forecast Office"
+      },
+      "product_title": {
+        "name": "Product Title"
+      },
+      "wmo_identifier": {
+        "name": "WMO Identifier"
+      },
+      "awips_identifier": {
+        "name": "AWIPS Identifier"
+      },
+      "issued_at": {
+        "name": "Issued At"
+      },
+      "expires_at": {
+        "name": "Expires At"
+      },
+      "checked_at": {
+        "name": "Checked At"
+      }
+    },
+    "image": {
+      "alert_flag_image": {
+        "name": "Alert Flag"
+      }
+    }
+  }
+}
