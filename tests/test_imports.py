@@ -159,6 +159,7 @@ def _install_stubs() -> None:
         entity_category: object = None
         device_class: object = None
         state_class: object = None
+        entity_registry_enabled_default: bool = True
 
     sensor = sys.modules["homeassistant.components.sensor"]
     sensor.SensorEntityDescription = SensorEntityDescription  # type: ignore[attr-defined]

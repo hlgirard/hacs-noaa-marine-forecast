@@ -132,13 +132,20 @@ class ForecastPeriod:
     start_time: time = FULL_DAY_START
     end_time: time = FULL_DAY_END
     end_next_day: bool = False
+    end_date: date | None = None
 
     def window(self, tz: tzinfo) -> tuple[datetime, datetime]:
-        """Return the nominal (approximate) window for this period."""
+        """Return the nominal (approximate) window for this period.
+
+        Composite labels such as ``SUN NIGHT THROUGH MON NIGHT`` set
+        ``end_date`` so the window spans the whole range instead of ending
+        after the first night.
+        """
         if self.period_date is None:
             raise ValueError("period has no date")
         start = datetime.combine(self.period_date, self.start_time, tzinfo=tz)
-        end_day = self.period_date + (timedelta(days=1) if self.end_next_day else timedelta())
+        base = self.end_date if self.end_date is not None else self.period_date
+        end_day = base + (timedelta(days=1) if self.end_next_day else timedelta())
         end = datetime.combine(end_day, self.end_time, tzinfo=tz)
         return start, end
 
@@ -326,8 +333,14 @@ def _split_combined(label: str) -> list[str]:
     return [piece.strip() for piece in label.split(" AND ") if piece.strip()]
 
 
-def _label_date_offset(label: str, reference: date) -> tuple[int, str, str]:
-    """Return (day offset, part, refinement) for a period label.
+def _label_date_span(
+    label: str, reference: date
+) -> tuple[int, int | None, str, str]:
+    """Return (start offset, end offset, part, refinement) for a label.
+
+    ``end offset`` is set only for composite ranges such as
+    ``SUN NIGHT THROUGH MON NIGHT``, resolved from the last weekday token
+    after ``THROUGH``. It is ``None`` for ordinary single periods.
 
     ``part`` is ``"day"`` for daytime periods, ``"night"`` for nighttime
     periods and ``"all"`` only when a label cannot be classified.
@@ -352,6 +365,21 @@ def _label_date_offset(label: str, reference: date) -> tuple[int, str, str]:
     if offset is None:
         offset = 0
 
+    end_offset: int | None = None
+    if "THROUGH" in normalized:
+        tail = normalized.split("THROUGH")[-1]
+        for token in tail.split():
+            token = token.strip(".,")
+            if token in WEEKDAYS:
+                end_offset = (WEEKDAYS[token] - reference.weekday()) % 7
+                break
+        if end_offset is not None:
+            start_date = reference + timedelta(days=offset)
+            end_date = reference + timedelta(days=end_offset)
+            if end_date < start_date:
+                # The range wraps past the end of the week.
+                end_offset += 7
+
     refinement = "full"
     if "AFTERNOON" in normalized:
         refinement = "afternoon"
@@ -364,6 +392,16 @@ def _label_date_offset(label: str, reference: date) -> tuple[int, str, str]:
 
     if part == PART_ALL:
         refinement = "full"
+    return offset, end_offset, part, refinement
+
+
+def _label_date_offset(label: str, reference: date) -> tuple[int, str, str]:
+    """Return (day offset, part, refinement) for a period label.
+
+    Kept for compatibility; new code should prefer :func:`_label_date_span`,
+    which additionally resolves composite ``THROUGH`` ranges.
+    """
+    offset, _, part, refinement = _label_date_span(label, reference)
     return offset, part, refinement
 
 
@@ -388,7 +426,7 @@ def _make_period(
     label: str, text: str, order: int, reference: date
 ) -> ForecastPeriod:
     """Build a normalized period from a raw label."""
-    offset, part, refinement = _label_date_offset(label, reference)
+    offset, end_offset, part, refinement = _label_date_span(label, reference)
     start, end, end_next_day = _period_times(part, refinement)
     return ForecastPeriod(
         source_label=label,
@@ -399,6 +437,9 @@ def _make_period(
         start_time=start,
         end_time=end,
         end_next_day=end_next_day,
+        end_date=reference + timedelta(days=end_offset)
+        if end_offset is not None
+        else None,
     )
 
 

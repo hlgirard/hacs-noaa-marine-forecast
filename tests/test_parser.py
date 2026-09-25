@@ -244,6 +244,92 @@ class TestNowNextSelection(unittest.TestCase):
         self.assertEqual(method, "no_periods")
 
 
+#: A product with composite ``THROUGH`` ranges, mirroring the live ANZ230
+#: product of 2026-09-25.
+THROUGH_PRODUCT = """\
+FZUS51 KBOX 252004
+CWFBOX
+
+Coastal Waters Forecast for Massachusetts and Rhode Island
+National Weather Service Boston/Norton MA
+403 PM EDT Fri Sep 25 2026
+
+Coastal waters from the Merrimack River MA to Watch Hill RI out
+to 60 NM
+
+ANZ230-260900-
+Boston Harbor-
+403 PM EDT Fri Sep 25 2026
+
+...STORM WARNING IN EFFECT THROUGH SATURDAY EVENING...
+
+.TONIGHT...NE winds 20 to 25 kt with gusts up to 35 kt. Waves 2 to 3 ft.
+.SAT...NE winds 20 to 25 kt, increasing to 25 to 30 kt in the afternoon. Rain.
+.SAT NIGHT...NE winds 25 to 30 kt with gusts up to 50 kt. Rain.
+.SUN...NE winds 20 to 25 kt with gusts up to 45 kt. Rain.
+.SUN NIGHT THROUGH MON NIGHT...NE winds 15 to 20 kt with gusts up to 35 kt. Rain.
+.TUE...N winds 5 to 10 kt. Waves 1 foot or less.
+.TUE NIGHT THROUGH WED NIGHT...SW winds around 5 kt. Waves 1 foot or less.
+
+Seas are reported as significant wave height.
+
+$$
+"""
+
+
+class TestThroughRanges(unittest.TestCase):
+    """Composite ``THROUGH`` labels span the whole range, with no gaps."""
+
+    def setUp(self) -> None:
+        self.product = parse_forecast(THROUGH_PRODUCT, "ANZ230")
+
+    def test_composite_gets_end_date(self) -> None:
+        by_label = {p.source_label: p for p in self.product.periods}
+        span = by_label["SUN NIGHT THROUGH MON NIGHT"]
+        self.assertEqual(span.period_date, date(2026, 9, 27))
+        self.assertEqual(span.end_date, date(2026, 9, 28))
+        start, end = span.window(EASTERN)
+        self.assertEqual(start, datetime(2026, 9, 27, 18, 0, tzinfo=EASTERN))
+        # Monday night ends Tuesday at 06:00.
+        self.assertEqual(end, datetime(2026, 9, 29, 6, 0, tzinfo=EASTERN))
+
+    def test_single_periods_have_no_end_date(self) -> None:
+        by_label = {p.source_label: p for p in self.product.periods}
+        self.assertIsNone(by_label["SAT"].end_date)
+        start, end = by_label["SAT"].window(EASTERN)
+        self.assertEqual(start, datetime(2026, 9, 26, 6, 0, tzinfo=EASTERN))
+        self.assertEqual(end, datetime(2026, 9, 26, 18, 0, tzinfo=EASTERN))
+
+    def test_no_gap_across_full_horizon(self) -> None:
+        """Every 6h step from Friday evening to Wednesday noon is covered."""
+        expected = {
+            (25, 20): "TONIGHT",
+            (26, 2): "TONIGHT",
+            (26, 8): "SAT",
+            (26, 14): "SAT",
+            (26, 20): "SAT NIGHT",
+            (27, 2): "SAT NIGHT",
+            (27, 8): "SUN",
+            (27, 14): "SUN",
+            (27, 20): "SUN NIGHT THROUGH MON NIGHT",
+            (28, 2): "SUN NIGHT THROUGH MON NIGHT",
+            (28, 8): "SUN NIGHT THROUGH MON NIGHT",
+            (28, 14): "SUN NIGHT THROUGH MON NIGHT",
+            (28, 20): "SUN NIGHT THROUGH MON NIGHT",
+            (29, 2): "SUN NIGHT THROUGH MON NIGHT",
+            (29, 8): "TUE",
+            (29, 14): "TUE",
+            (29, 20): "TUE NIGHT THROUGH WED NIGHT",
+            (30, 2): "TUE NIGHT THROUGH WED NIGHT",
+        }
+        for (day, hour), label in expected.items():
+            moment = datetime(2026, 9, day, hour, tzinfo=EASTERN)
+            now, _, method = select_now_next(self.product, moment, EASTERN)
+            assert now is not None, f"gap at {moment}"
+            self.assertEqual(now.source_label, label, f"at {moment}")
+            self.assertEqual(method, "current_window", f"at {moment}")
+
+
 class TestGroupedProduct(unittest.TestCase):
     """Products covering several zones."""
 

@@ -33,21 +33,6 @@
       "conditions_now": {
         "name": "Conditions Now"
       },
-      "conditions_next": {
-        "name": "Conditions Next"
-      },
-      "conditions_today": {
-        "name": "Conditions Today"
-      },
-      "conditions_tonight": {
-        "name": "Conditions Tonight"
-      },
-      "conditions_tomorrow": {
-        "name": "Conditions Tomorrow"
-      },
-      "conditions_tomorrow_night": {
-        "name": "Conditions Tomorrow Night"
-      },
       "alert_flags": {
         "name": "Alert Flags"
       },
@@ -62,6 +47,9 @@
       },
       "alert": {
         "name": "Alert"
+      },
+      "periods": {
+        "name": "Periods"
       },
       "zone_name": {
         "name": "Zone Name"

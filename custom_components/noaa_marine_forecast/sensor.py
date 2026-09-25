@@ -27,7 +27,7 @@ from .const import CONF_NAME, CONF_ZONE_ID, DEFAULT_NAME, DOMAIN
 from .coordinator import MarineZoneData
 from .flags import FLAG_TITLES
 from .alerts import format_alert_text, top_alert_detail
-from .parser import PART_DAY, PART_NIGHT, ForecastPeriod, format_hazard_title
+from .parser import ForecastPeriod, format_hazard_title
 
 UTC = timezone.utc
 
@@ -92,44 +92,6 @@ SENSORS: tuple[MarineSensorDescription, ...] = (
         attributes_fn=lambda data: _now_attributes(data),
     ),
     MarineSensorDescription(
-        key="conditions_next",
-        translation_key="conditions_next",
-        value_fn=lambda data: _period_text(data.next_period),
-        attributes_fn=lambda data: _period_attributes(data, data.next_period),
-    ),
-    MarineSensorDescription(
-        key="conditions_today",
-        translation_key="conditions_today",
-        value_fn=lambda data: _period_text(data.period_for(0, PART_DAY)),
-        attributes_fn=lambda data: _period_attributes(
-            data, data.period_for(0, PART_DAY)
-        ),
-    ),
-    MarineSensorDescription(
-        key="conditions_tonight",
-        translation_key="conditions_tonight",
-        value_fn=lambda data: _period_text(data.period_for(0, PART_NIGHT)),
-        attributes_fn=lambda data: _period_attributes(
-            data, data.period_for(0, PART_NIGHT)
-        ),
-    ),
-    MarineSensorDescription(
-        key="conditions_tomorrow",
-        translation_key="conditions_tomorrow",
-        value_fn=lambda data: _period_text(data.period_for(1, PART_DAY)),
-        attributes_fn=lambda data: _period_attributes(
-            data, data.period_for(1, PART_DAY)
-        ),
-    ),
-    MarineSensorDescription(
-        key="conditions_tomorrow_night",
-        translation_key="conditions_tomorrow_night",
-        value_fn=lambda data: _period_text(data.period_for(1, PART_NIGHT)),
-        attributes_fn=lambda data: _period_attributes(
-            data, data.period_for(1, PART_NIGHT)
-        ),
-    ),
-    MarineSensorDescription(
         key="alert_flags",
         translation_key="alert_flags",
         value_fn=lambda data: data.alerts.combination,
@@ -157,6 +119,13 @@ SENSORS: tuple[MarineSensorDescription, ...] = (
                 alert.as_attributes() for alert in data.alerts.pending
             ],
         },
+    ),
+    MarineSensorDescription(
+        key="periods",
+        translation_key="periods",
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: len(data.forecast.periods),
+        attributes_fn=lambda data: {"periods": _periods_list(data)},
     ),
     MarineSensorDescription(
         key="alert",
@@ -244,6 +213,31 @@ def _alert_attributes(data: MarineZoneData) -> dict[str, Any]:
         "alerts_available": data.alerts_available,
         "alerts_updated_at": _iso(data.alerts_updated_at),
     }
+
+
+def _periods_list(data: MarineZoneData) -> list[dict[str, Any]]:
+    """Return every parsed period as a dashboard-ready dict, in order."""
+    tz = dt_util.DEFAULT_TIME_ZONE
+    items: list[dict[str, Any]] = []
+    for period in data.forecast.periods:
+        try:
+            start, end = period.window(tz)
+        except ValueError:
+            start, end = None, None
+        items.append(
+            {
+                "label": period.source_label,
+                "text": period.text,
+                "date": period.period_date.isoformat()
+                if period.period_date
+                else None,
+                "part": period.part,
+                "order": period.order,
+                "start": start.isoformat() if start is not None else None,
+                "end": end.isoformat() if end is not None else None,
+            }
+        )
+    return items
 
 
 def _alert_detail(data: MarineZoneData) -> dict[str, Any]:

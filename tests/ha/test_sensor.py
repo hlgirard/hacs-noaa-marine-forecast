@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
+from datetime import datetime, timezone
 
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
@@ -125,13 +126,52 @@ class TestHazardAttributes:
         assert attrs["period_label"] == "THIS AFTERNOON"
         assert attrs["selection_method"]
 
-    def test_other_periods_carry_hazard_title(
+class TestPeriodsSensor:
+    """The periods sensor exposes the full parsed horizon for the card."""
+
+    def test_state_is_period_count(self, hass, coordinator, make_zone_data):
+        entity = _sensor(hass, coordinator, make_zone_data, "periods")
+        assert entity.native_value == 7
+
+    def test_periods_in_order_with_detail(
         self, hass, coordinator, make_zone_data
     ):
-        entity = _sensor(hass, coordinator, make_zone_data, "conditions_tomorrow")
-        attrs = entity.extra_state_attributes
-        assert attrs["hazard_title"] == (
-            "Storm Warning in Effect from 2 PM EDT This Afternoon "
-            "through Saturday Evening"
+        entity = _sensor(hass, coordinator, make_zone_data, "periods")
+        periods = entity.extra_state_attributes["periods"]
+        assert [p["label"] for p in periods] == [
+            "THIS AFTERNOON",
+            "TONIGHT",
+            "SAT",
+            "SAT NIGHT",
+            "SUN",
+            "SUN NIGHT",
+            "MON",
+        ]
+        first = periods[0]
+        assert first["part"] == "day"
+        assert first["date"] == "2026-09-25"
+        assert first["order"] == 0
+        assert first["text"].startswith("NE winds")
+        # Window instants are exact regardless of the ambient timezone.
+        assert datetime.fromisoformat(first["start"]) == datetime(
+            2026, 9, 25, 19, 0, tzinfo=timezone.utc
         )
-        assert attrs["period_label"] == "SAT"
+        assert datetime.fromisoformat(first["end"]) == datetime(
+            2026, 9, 26, 1, 0, tzinfo=timezone.utc
+        )
+
+    def test_deprecated_period_sensors_removed(self):
+        from custom_components.noaa_marine_forecast.sensor import SENSORS
+
+        keys = {item.key for item in SENSORS}
+        for key in (
+            "conditions_today",
+            "conditions_tonight",
+            "conditions_next",
+            "conditions_tomorrow",
+            "conditions_tomorrow_night",
+        ):
+            assert key not in keys, key
+        # conditions_now and the new periods sensor stay.
+        assert "conditions_now" in keys
+        assert "periods" in keys
