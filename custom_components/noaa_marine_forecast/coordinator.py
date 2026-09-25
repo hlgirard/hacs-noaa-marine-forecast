@@ -19,6 +19,7 @@ from .api import (
     async_fetch_zone_alerts,
 )
 from .const import (
+    CONF_SCAN_INTERVAL,
     CONF_ZONE_ID,
     DEFAULT_NAME,
     DEFAULT_SCAN_INTERVAL_MINUTES,
@@ -30,8 +31,6 @@ from .parser import ForecastPeriod, ForecastProduct, parse_forecast, select_now_
 _LOGGER = logging.getLogger(__name__)
 
 UTC = timezone.utc
-
-CONF_SCAN_INTERVAL = "scan_interval"
 
 
 @dataclass(frozen=True)

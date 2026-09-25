@@ -99,6 +99,73 @@ class TestConfigFlowTitlePlaceholders(unittest.TestCase):
         )
 
 
+class TestIntraPackageImports(unittest.TestCase):
+    """Every ``from .module import NAME`` must actually resolve.
+
+    A constant added to one module and imported from another, but never
+    defined in the source module, raises ImportError at integration load time
+    and cannot be caught by the fast test suite because the importing module
+    needs Home Assistant.
+    """
+
+    @staticmethod
+    def _defined_names(path: Path) -> set[str]:
+        """Top level names a module defines or imports."""
+        tree = ast.parse(path.read_text(), filename=str(path))
+        names: set[str] = set()
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                names.add(node.name)
+            elif isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        names.add(target.id)
+            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                names.add(node.target.id)
+            elif isinstance(node, (ast.Import, ast.ImportFrom)):
+                for alias in node.names:
+                    names.add(alias.asname or alias.name.split(".")[0])
+            elif isinstance(node, ast.Try):
+                for sub in node.body:
+                    if isinstance(sub, (ast.Import, ast.ImportFrom)):
+                        for alias in sub.names:
+                            names.add(alias.asname or alias.name.split(".")[0])
+        return names
+
+    def test_relative_imports_resolve(self) -> None:
+        modules = sorted(COMPONENT.glob("*.py"))
+        defined = {path.name: self._defined_names(path) for path in modules}
+        for path in modules:
+            tree = ast.parse(path.read_text(), filename=str(path))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.ImportFrom) or node.level == 0:
+                    continue
+                target_module = node.module + ".py"
+                if target_module not in defined:
+                    continue
+                for alias in node.names:
+                    if alias.name == "*":
+                        continue
+                    self.assertIn(
+                        alias.name,
+                        defined[target_module],
+                        f"{path.name} imports {alias.name!r} from "
+                        f".{node.module}, which does not define it",
+                    )
+
+    def test_conf_scan_interval_is_in_const(self) -> None:
+        """The config flow and coordinator share one scan interval key."""
+        const_names = self._defined_names(COMPONENT / "const.py")
+        self.assertIn("CONF_SCAN_INTERVAL", const_names)
+        for name in ("coordinator.py", "config_flow.py"):
+            source = (COMPONENT / name).read_text()
+            self.assertNotIn(
+                '\nCONF_SCAN_INTERVAL = "',
+                source,
+                f"{name} must import CONF_SCAN_INTERVAL from .const",
+            )
+
+
 class TestCoordinatorImplementsUpdateMethod(unittest.TestCase):
     """The coordinator must actually implement ``_async_update_data``.
 

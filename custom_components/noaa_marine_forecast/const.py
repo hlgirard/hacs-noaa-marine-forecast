@@ -12,6 +12,7 @@ PLATFORMS: Final[list[str]] = ["sensor", "image"]
 
 CONF_ZONE_ID: Final = "zone_id"
 CONF_NAME: Final = "name"
+CONF_SCAN_INTERVAL: Final = "scan_interval"
 
 DEFAULT_NAME: Final = "NOAA Marine Forecast"
 DEFAULT_SCAN_INTERVAL_MINUTES: Final = 10
