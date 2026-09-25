@@ -11,6 +11,8 @@ from custom_components.noaa_marine_forecast.alerts import (
     format_alert_window,
     normalize_alert,
     parse_alert_payload,
+    select_top_alert,
+    top_alert_detail,
 )
 from custom_components.noaa_marine_forecast.flags import (
     FLAG_GALE_WARNING,
@@ -290,6 +292,40 @@ class FormatAlertTextTest(unittest.TestCase):
         # NOW+50h is Sun 14:00 UTC = Sun 10:00am Eastern. The gale ends at
         # NOW+2h, so borrowing its window would say "Friday 10am".
         self.assertEqual(text, "Hurricane Warning until Sunday 10am")
+
+
+class SelectTopAlertTest(unittest.TestCase):
+    """Tests for picking the alert that drives the highest flag."""
+
+    def test_none_when_clear(self) -> None:
+        bundle = build_alert_bundle([], [], NOW)
+        self.assertIsNone(select_top_alert(bundle))
+        self.assertIsNone(top_alert_detail(bundle))
+
+    def test_prefers_flag_driver_over_first_alert(self) -> None:
+        bundle = build_alert_bundle(
+            [_props("Gale Warning", onset=-1, ends=2)],
+            [_props("Hurricane Warning", onset=3, ends=50)],
+            NOW,
+        )
+        top = select_top_alert(bundle)
+        assert top is not None
+        self.assertEqual(top.event, "HURRICANE WARNING")
+
+    def test_detail_carries_alert_fields(self) -> None:
+        bundle = build_alert_bundle(
+            [_props("Storm Warning", onset=-1, ends=6)], [], NOW
+        )
+        detail = top_alert_detail(bundle)
+        assert detail is not None
+        self.assertEqual(detail["flag"], FLAG_STORM_WARNING)
+        self.assertEqual(detail["flag_title"], "Storm Warning")
+        self.assertEqual(detail["lifecycle"], "active")
+        self.assertEqual(detail["severity"], "Severe")
+        self.assertEqual(detail["area"], "Boston Harbor")
+        self.assertTrue(str(detail["headline"]).startswith("Storm Warning"))
+        # NOW is 2026-09-25 12:00 UTC; ends is +6h.
+        self.assertEqual(detail["ends"], "2026-09-25T18:00:00+00:00")
 
 
 if __name__ == "__main__":

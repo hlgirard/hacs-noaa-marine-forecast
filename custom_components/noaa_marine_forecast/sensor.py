@@ -21,11 +21,13 @@ from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
     DataUpdateCoordinator,
 )
+from homeassistant.util import dt as dt_util
 
 from .const import CONF_NAME, CONF_ZONE_ID, DEFAULT_NAME, DOMAIN
 from .coordinator import MarineZoneData
 from .flags import FLAG_TITLES
-from .parser import PART_DAY, PART_NIGHT, ForecastPeriod
+from .alerts import format_alert_text, top_alert_detail
+from .parser import PART_DAY, PART_NIGHT, ForecastPeriod, format_hazard_title
 
 UTC = timezone.utc
 
@@ -40,8 +42,15 @@ def _period_text(period: ForecastPeriod | None) -> str | None:
     return period.text if period else None
 
 
-def _period_attributes(period: ForecastPeriod | None) -> dict[str, Any] | None:
-    """Return descriptive attributes for a period."""
+def _period_attributes(
+    data: MarineZoneData, period: ForecastPeriod | None
+) -> dict[str, Any] | None:
+    """Return descriptive attributes for a period.
+
+    The hazard summary is product-level rather than per period, but every
+    period sensor carries it so cards never have to know which sensor is
+    "current".
+    """
     if period is None:
         return None
     return {
@@ -50,15 +59,20 @@ def _period_attributes(period: ForecastPeriod | None) -> dict[str, Any] | None:
         if period.period_date
         else None,
         "period_part": period.part,
+        "hazard_summary": data.forecast.hazard_summary,
+        "hazard_title": format_hazard_title(data.forecast.hazard_summary),
     }
 
 
 def _now_attributes(data: MarineZoneData) -> dict[str, Any]:
     """Return period attributes plus the raw product text."""
-    attributes: dict[str, Any] = _period_attributes(data.now_period) or {}
+    attributes: dict[str, Any] = _period_attributes(data, data.now_period) or {}
     attributes["full_text"] = data.forecast.raw_text
-    attributes["hazard_summary"] = data.forecast.hazard_summary
     attributes["selection_method"] = data.selection_method
+    attributes.setdefault("hazard_summary", data.forecast.hazard_summary)
+    attributes.setdefault(
+        "hazard_title", format_hazard_title(data.forecast.hazard_summary)
+    )
     return attributes
 
 
@@ -81,34 +95,38 @@ SENSORS: tuple[MarineSensorDescription, ...] = (
         key="conditions_next",
         translation_key="conditions_next",
         value_fn=lambda data: _period_text(data.next_period),
-        attributes_fn=lambda data: _period_attributes(data.next_period),
+        attributes_fn=lambda data: _period_attributes(data, data.next_period),
     ),
     MarineSensorDescription(
         key="conditions_today",
         translation_key="conditions_today",
         value_fn=lambda data: _period_text(data.period_for(0, PART_DAY)),
-        attributes_fn=lambda data: _period_attributes(data.period_for(0, PART_DAY)),
+        attributes_fn=lambda data: _period_attributes(
+            data, data.period_for(0, PART_DAY)
+        ),
     ),
     MarineSensorDescription(
         key="conditions_tonight",
         translation_key="conditions_tonight",
         value_fn=lambda data: _period_text(data.period_for(0, PART_NIGHT)),
         attributes_fn=lambda data: _period_attributes(
-            data.period_for(0, PART_NIGHT)
+            data, data.period_for(0, PART_NIGHT)
         ),
     ),
     MarineSensorDescription(
         key="conditions_tomorrow",
         translation_key="conditions_tomorrow",
         value_fn=lambda data: _period_text(data.period_for(1, PART_DAY)),
-        attributes_fn=lambda data: _period_attributes(data.period_for(1, PART_DAY)),
+        attributes_fn=lambda data: _period_attributes(
+            data, data.period_for(1, PART_DAY)
+        ),
     ),
     MarineSensorDescription(
         key="conditions_tomorrow_night",
         translation_key="conditions_tomorrow_night",
         value_fn=lambda data: _period_text(data.period_for(1, PART_NIGHT)),
         attributes_fn=lambda data: _period_attributes(
-            data.period_for(1, PART_NIGHT)
+            data, data.period_for(1, PART_NIGHT)
         ),
     ),
     MarineSensorDescription(
@@ -139,6 +157,12 @@ SENSORS: tuple[MarineSensorDescription, ...] = (
                 alert.as_attributes() for alert in data.alerts.pending
             ],
         },
+    ),
+    MarineSensorDescription(
+        key="alert",
+        translation_key="alert",
+        value_fn=lambda data: _alert_text(data),
+        attributes_fn=lambda data: _alert_detail(data),
     ),
     MarineSensorDescription(
         key="zone_name",
@@ -222,6 +246,32 @@ def _alert_attributes(data: MarineZoneData) -> dict[str, Any]:
     }
 
 
+def _alert_detail(data: MarineZoneData) -> dict[str, Any]:
+    """Return flag, zone and top-alert attributes for the alert sensor."""
+    bundle = data.alerts
+    attributes: dict[str, Any] = {
+        "flag": bundle.highest_flag,
+        "flag_title": FLAG_TITLES.get(bundle.highest_flag),
+        "lifecycle": bundle.highest_lifecycle,
+        "zone": data.zone_id,
+        "zone_name": data.forecast.zone_name(),
+        "alerts_available": data.alerts_available,
+        "alerts_updated_at": _iso(data.alerts_updated_at),
+    }
+    detail = top_alert_detail(bundle)
+    if detail is not None:
+        attributes.update(detail)
+    return attributes
+
+
+def _alert_text(data: MarineZoneData) -> str:
+    """Return the one line alert summary, or the all-clear text."""
+    return (
+        format_alert_text(data.alerts, dt_util.DEFAULT_TIME_ZONE)
+        or "No marine alerts"
+    )
+
+
 def _alert_summary(data: MarineZoneData) -> str:
     """Return a one line summary of the marine alerts."""
     parts: list[str] = []
@@ -271,6 +321,7 @@ class MarineSensor(CoordinatorEntity[MarineZoneData], SensorEntity):
         """Initialize the sensor."""
         super().__init__(coordinator)
         self.entity_description = description
+        self._zone_id = zone_id
         self._attr_unique_id = f"{zone_id.lower()}_{description.key}"
         self._attr_device_info = {
             "identifiers": {(DOMAIN, zone_id.lower())},
@@ -290,11 +341,46 @@ class MarineSensor(CoordinatorEntity[MarineZoneData], SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
-        """Return the sensor attributes."""
+        """Return the sensor attributes.
+
+        The ``alert`` sensor additionally mirrors the flag image entity's
+        ``entity_picture`` URL so it can drive a picture-showing card on its
+        own. The frontend reads ``attributes.entity_picture`` for any domain,
+        and the URL is a stable signed proxy URL, so copying it verbatim is
+        safe. A missing image entity only costs the picture, never the text.
+        """
         data = self.coordinator.data
         if data is None or self.entity_description.attributes_fn is None:
+            attributes = None
+        else:
+            attributes = self.entity_description.attributes_fn(data)
+        if self.entity_description.key != "alert":
+            return attributes
+        merged = dict(attributes or {})
+        merged["entity_picture"] = self._alert_flag_picture()
+        return merged
+
+    def _alert_flag_picture(self) -> str | None:
+        """Return the flag image entity's picture URL, if registered."""
+        hass = self.hass
+        if hass is None:
             return None
-        return self.entity_description.attributes_fn(data)
+        try:
+            from homeassistant.helpers import entity_registry as er
+
+            registry = er.async_get(hass)
+            entity_id = registry.async_get_entity_id(
+                "image", DOMAIN, f"{self._zone_id.lower()}_alert_flag_image"
+            )
+            if entity_id is None:
+                return None
+            state = hass.states.get(entity_id)
+            if state is None:
+                return None
+            picture = state.attributes.get("entity_picture")
+            return picture if isinstance(picture, str) else None
+        except Exception:  # pragma: no cover - defensive
+            return None
 
     @property
     def available(self) -> bool:

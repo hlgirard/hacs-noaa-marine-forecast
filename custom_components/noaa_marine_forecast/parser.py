@@ -435,6 +435,80 @@ def _clean_hazard_text(lines: list[str]) -> str:
     return " | ".join(statement for statement in statements if statement)
 
 
+def format_hazard_title(summary: str | None) -> str | None:
+    """Return a normalized single-statement hazard title, or None.
+
+    The raw ``hazard_summary`` is all-caps NWS boilerplate and may join
+    several statements with ``" | "``. Cards want one readable line, so this
+    takes the first statement and title-cases it, keeping time abbreviations
+    intact and leaving small connector words lowercase::
+
+        "STORM WARNING IN EFFECT THROUGH SATURDAY EVENING"
+        -> "Storm Warning in effect through Saturday evening"
+
+    The raw summary is kept verbatim alongside this wherever both are exposed.
+    """
+    if not summary:
+        return None
+    first = summary.split("|")[0].strip().rstrip(".").strip()
+    if not first:
+        return None
+    return " ".join(
+        _title_word(word, index == 0) for index, word in enumerate(first.split())
+    )
+
+
+#: Words that stay lowercase inside a hazard title.
+_TITLE_SMALL_WORDS = frozenset(
+    {
+        "a",
+        "an",
+        "the",
+        "in",
+        "from",
+        "through",
+        "thru",
+        "to",
+        "of",
+        "for",
+        "on",
+        "and",
+        "or",
+        "until",
+        "with",
+        "at",
+        "by",
+    }
+)
+
+#: Abbreviations that keep their canonical case inside a hazard title.
+_TITLE_ABBREVIATIONS = {
+    "am": "AM",
+    "pm": "PM",
+    "edt": "EDT",
+    "est": "EST",
+    "cdt": "CDT",
+    "cst": "CST",
+    "mdt": "MDT",
+    "mst": "MST",
+    "pdt": "PDT",
+    "pst": "PST",
+    "utc": "UTC",
+    "gmt": "GMT",
+    "nws": "NWS",
+}
+
+
+def _title_word(word: str, is_first: bool) -> str:
+    """Return one word of a hazard title in its display case."""
+    lowered = word.lower()
+    if lowered in _TITLE_ABBREVIATIONS:
+        return _TITLE_ABBREVIATIONS[lowered]
+    if not is_first and lowered in _TITLE_SMALL_WORDS:
+        return lowered
+    return word.capitalize()
+
+
 def parse_forecast(
     raw_text: str, zone_id: str | None = None
 ) -> ForecastProduct:

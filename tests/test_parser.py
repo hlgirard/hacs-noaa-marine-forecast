@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 from custom_components.noaa_marine_forecast.parser import (
     PART_DAY,
     PART_NIGHT,
+    format_hazard_title,
     parse_forecast,
     select_now_next,
 )
@@ -65,6 +66,24 @@ class TestProductMetadata(unittest.TestCase):
             "STORM WARNING IN EFFECT FROM 2 PM EDT THIS AFTERNOON THROUGH "
             "SATURDAY EVENING",
         )
+
+    def test_hazard_title_normalizes_first_statement(self) -> None:
+        self.assertEqual(
+            format_hazard_title(self.product.hazard_summary),
+            "Storm Warning in Effect from 2 PM EDT This Afternoon through "
+            "Saturday Evening",
+        )
+
+    def test_hazard_title_takes_first_statement_only(self) -> None:
+        self.assertEqual(
+            format_hazard_title("GALE WARNING TONIGHT | SMALL CRAFT ADVISORY SAT."),
+            "Gale Warning Tonight",
+        )
+
+    def test_hazard_title_none_for_empty(self) -> None:
+        self.assertIsNone(format_hazard_title(None))
+        self.assertIsNone(format_hazard_title(""))
+        self.assertIsNone(format_hazard_title("..."))
 
     def test_additional_text_after_periods(self) -> None:
         assert self.product.additional_text is not None

@@ -175,7 +175,7 @@ class TestImageBytes:
         entity = make_image()
         coordinator.data = make_zone_data(active=(flag,))
         entity._apply()
-        assert entity.content_type == "image/svg+xml"
+        assert entity.content_type == "image/png"
 
     def test_image_raises_for_no_flag(self, coordinator, make_image, make_zone_data):
         """Pins the defensive behaviour: no bytes for a flag that has no asset."""
@@ -353,4 +353,4 @@ class TestFullSetup:
             for e in registry.entities.values()
             if e.platform == DOMAIN and e.domain == "sensor"
         ]
-        assert len(sensors) == 18, f"expected 18 sensors, found {len(sensors)}"
+        assert len(sensors) == 19, f"expected 19 sensors, found {len(sensors)}"

@@ -25,6 +25,8 @@ __all__ = [
     "parse_alert_payload",
     "format_alert_window",
     "format_alert_text",
+    "select_top_alert",
+    "top_alert_detail",
 ]
 
 LIFECYCLE_ACTIVE = "active"
@@ -277,6 +279,38 @@ def format_alert_window(end: datetime | None, tz: tzinfo | None = None) -> str:
     return f"{local:%A} {hour}{minutes}{suffix}"
 
 
+def select_top_alert(bundle: AlertBundle) -> NormalizedAlert | None:
+    """Return the alert that drives the highest flag, or None when clear.
+
+    The window and detail text must come from the alert that actually drives
+    the flag rather than the first alert in the bundle: a pending hurricane
+    outranks an active gale warning, and pairing the hurricane title with the
+    gale's end time would be wrong.
+    """
+    if bundle.highest_flag == FLAG_NONE:
+        return None
+    alerts = bundle.all_marine
+    top = next((a for a in alerts if a.flag == bundle.highest_flag), None)
+    return top if top is not None else (alerts[0] if alerts else None)
+
+
+def top_alert_detail(bundle: AlertBundle) -> dict[str, object] | None:
+    """Return a dashboard-ready detail dict for the flag-driving alert."""
+    top = select_top_alert(bundle)
+    if top is None:
+        return None
+    return {
+        "flag": top.flag,
+        "flag_title": FLAG_TITLES.get(top.flag or FLAG_NONE, top.flag),
+        "lifecycle": top.lifecycle,
+        "severity": top.severity,
+        "headline": top.headline,
+        "area": top.area,
+        "onset": _iso(top.onset),
+        "ends": _iso(top.effective_end),
+    }
+
+
 def format_alert_text(bundle: AlertBundle, tz: tzinfo | None = None) -> str | None:
     """Return a one line summary of the highest flag, or None when clear.
 
@@ -290,9 +324,6 @@ def format_alert_text(bundle: AlertBundle, tz: tzinfo | None = None) -> str | No
     title = FLAG_TITLES.get(bundle.highest_flag)
     if title is None:
         return None
-    alerts = bundle.all_marine
-    top = next((a for a in alerts if a.flag == bundle.highest_flag), None)
-    if top is None:
-        top = alerts[0] if alerts else None
+    top = select_top_alert(bundle)
     window = format_alert_window(top.effective_end if top else None, tz)
     return f"{title} until {window}" if window else title

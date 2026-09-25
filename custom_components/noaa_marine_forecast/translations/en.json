@@ -60,6 +60,9 @@
       "alert_summary": {
         "name": "Alert Summary"
       },
+      "alert": {
+        "name": "Alert"
+      },
       "zone_name": {
         "name": "Zone Name"
       },
