@@ -7,6 +7,8 @@ from datetime import datetime, timedelta, timezone
 
 from custom_components.noaa_marine_forecast.alerts import (
     build_alert_bundle,
+    format_alert_text,
+    format_alert_window,
     normalize_alert,
     parse_alert_payload,
 )
@@ -225,6 +227,69 @@ class TestAlertBundle(unittest.TestCase):
         self.assertEqual(bundle.highest_flag, FLAG_NONE)
         self.assertIsNone(bundle.highest_lifecycle)
         self.assertEqual(bundle.combination, FLAG_NONE)
+
+
+class FormatAlertWindowTest(unittest.TestCase):
+    """Tests for the compact local-time window formatting."""
+
+    def test_no_end_time(self) -> None:
+        self.assertEqual(format_alert_window(None), "")
+
+    def test_on_the_hour_drops_minutes(self) -> None:
+        end = datetime(2026, 9, 26, 20, 0, tzinfo=timezone.utc)
+        self.assertEqual(format_alert_window(end), "Saturday 8pm")
+
+    def test_keeps_minutes_when_off_the_hour(self) -> None:
+        end = datetime(2026, 9, 26, 20, 30, tzinfo=timezone.utc)
+        self.assertEqual(format_alert_window(end), "Saturday 8:30pm")
+
+    def test_midnight_is_twelve_am_not_zero(self) -> None:
+        end = datetime(2026, 9, 26, 0, 0, tzinfo=timezone.utc)
+        self.assertEqual(format_alert_window(end), "Saturday 12am")
+
+    def test_noon_is_twelve_pm(self) -> None:
+        end = datetime(2026, 9, 26, 12, 0, tzinfo=timezone.utc)
+        self.assertEqual(format_alert_window(end), "Saturday 12pm")
+
+    def test_tz_converts_the_instant(self) -> None:
+        eastern = timezone(timedelta(hours=-4))
+        # 00:30 UTC on the 27th is 20:30 on the 26th in Eastern.
+        end = datetime(2026, 9, 27, 0, 30, tzinfo=timezone.utc)
+        self.assertEqual(format_alert_window(end, eastern), "Saturday 8:30pm")
+
+
+class FormatAlertTextTest(unittest.TestCase):
+    """Tests for the one line alert summary."""
+
+    def test_none_when_clear(self) -> None:
+        self.assertIsNone(format_alert_text(build_alert_bundle([], [], NOW)))
+
+    def test_title_with_window(self) -> None:
+        bundle = build_alert_bundle(
+            [_props("Storm Warning", onset=-1, ends=6)], [], NOW
+        )
+        # NOW is 2026-09-25 12:00 UTC, so ends is 18:00 UTC = 2pm Eastern.
+        text = format_alert_text(bundle, timezone(timedelta(hours=-4)))
+        self.assertEqual(text, "Storm Warning until Friday 2pm")
+
+    def test_falls_back_to_bare_title_without_end_time(self) -> None:
+        bundle = build_alert_bundle(
+            [_props("Gale Warning", onset=-1, ends=None)], [], NOW
+        )
+        self.assertEqual(format_alert_text(bundle), "Gale Warning")
+
+    def test_window_comes_from_the_flag_driving_alert(self) -> None:
+        """A pending hurricane must not borrow the active gale's end time."""
+        bundle = build_alert_bundle(
+            [_props("Gale Warning", onset=-1, ends=2)],
+            [_props("Hurricane Warning", onset=3, ends=50)],
+            NOW,
+        )
+        self.assertEqual(bundle.highest_flag, FLAG_HURRICANE_WARNING)
+        text = format_alert_text(bundle, timezone(timedelta(hours=-4)))
+        # NOW+50h is Sun 14:00 UTC = Sun 10:00am Eastern. The gale ends at
+        # NOW+2h, so borrowing its window would say "Friday 10am".
+        self.assertEqual(text, "Hurricane Warning until Sunday 10am")
 
 
 if __name__ == "__main__":

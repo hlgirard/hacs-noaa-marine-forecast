@@ -6,10 +6,11 @@ Pure Python so it can be unit tested without Home Assistant.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, tzinfo
 
 from .flags import (
     FLAG_NONE,
+    FLAG_TITLES,
     flag_for_event,
     is_ignored_event,
     is_marine_event,
@@ -22,6 +23,8 @@ __all__ = [
     "normalize_alert",
     "build_alert_bundle",
     "parse_alert_payload",
+    "format_alert_window",
+    "format_alert_text",
 ]
 
 LIFECYCLE_ACTIVE = "active"
@@ -253,3 +256,43 @@ def build_alert_bundle(
         highest_flag=highest,
         highest_lifecycle=lifecycle,
     )
+
+
+def format_alert_window(end: datetime | None, tz: tzinfo | None = None) -> str:
+    """Return a compact local-time end window such as ``Saturday 8pm``.
+
+    Minutes are dropped on the hour and kept otherwise. Returns an empty
+    string when the end time is unknown, so callers can fall back to a bare
+    title rather than printing a dangling "until".
+
+    ``tz`` is the Home Assistant configured timezone; when omitted the value
+    is formatted in whatever timezone ``end`` already carries.
+    """
+    if end is None:
+        return ""
+    local = end.astimezone(tz) if tz is not None else end
+    hour = local.strftime("%I").lstrip("0") or "12"
+    minutes = "" if local.minute == 0 else f":{local.minute:02d}"
+    suffix = "am" if local.hour < 12 else "pm"
+    return f"{local:%A} {hour}{minutes}{suffix}"
+
+
+def format_alert_text(bundle: AlertBundle, tz: tzinfo | None = None) -> str | None:
+    """Return a one line summary of the highest flag, or None when clear.
+
+    The window is taken from the alert that actually drives the flag rather
+    than the first alert in the bundle: a pending hurricane outranks an active
+    gale warning, and pairing the hurricane title with the gale's end time
+    would be wrong.
+    """
+    if bundle.highest_flag == FLAG_NONE:
+        return None
+    title = FLAG_TITLES.get(bundle.highest_flag)
+    if title is None:
+        return None
+    alerts = bundle.all_marine
+    top = next((a for a in alerts if a.flag == bundle.highest_flag), None)
+    if top is None:
+        top = alerts[0] if alerts else None
+    window = format_alert_window(top.effective_end if top else None, tz)
+    return f"{title} until {window}" if window else title

@@ -10,7 +10,9 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.util import dt as dt_util
 
+from .alerts import format_alert_text
 from .assets import load_flag_image
 from .const import CONF_NAME, CONF_ZONE_ID, DEFAULT_NAME, DOMAIN
 from .coordinator import MarineZoneData
@@ -96,7 +98,13 @@ class MarineFlagImage(ImageEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, object]:
-        """Return the flag state as attributes."""
+        """Return the flag state as attributes.
+
+        ``alert_text`` is a ready made one line summary for dashboard cards.
+        The native tile card's ``state_content`` selects an attribute by name
+        rather than evaluating a template, so this is what lets a stock tile
+        card show the alert without any custom card or Jinja.
+        """
         bundle: MarineZoneData | None = self.coordinator.data
         if bundle is None:
             return {}
@@ -108,6 +116,7 @@ class MarineFlagImage(ImageEntity):
             "pending_flags": list(bundle.alerts.pending_flags),
             "flag_combination": bundle.alerts.combination,
             "alerts_available": bundle.alerts_available,
+            "alert_text": format_alert_text(bundle.alerts, dt_util.DEFAULT_TIME_ZONE),
         }
 
     def _apply(self) -> bool:
