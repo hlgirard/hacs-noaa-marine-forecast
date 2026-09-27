@@ -149,6 +149,59 @@ class TestAlertBundle(unittest.TestCase):
         )
         self.assertEqual(bundle.pending, ())
 
+    def test_cancelled_storm_warning_not_reported_as_active(self) -> None:
+        """Regression test: ANZ230 kept returning a cancelled Storm Warning.
+
+        NWS re-issues the cancelled event with response=AllClear plus a
+        /O.CAN./ VTEC code while keeping status=Actual/messageType=Alert,
+        so /alerts/active keeps serving it past expiry. It must not
+        outrank the replacement Gale Warning.
+        """
+        gale = _props("Gale Warning", onset=-2, ends=20, alert_id="urn:oid:gale")
+        cancelled = _props("Storm Warning", onset=-2, ends=6, alert_id="urn:oid:can")
+        cancelled.update(
+            {
+                "severity": "Minor",
+                "certainty": "Observed",
+                "urgency": "Past",
+                "response": "AllClear",
+                "headline": "The Storm Warning has been cancelled.",
+                "description": (
+                    "The Storm Warning has been cancelled "
+                    "and is no longer in effect."
+                ),
+                "parameters": {
+                    "VTEC": ["/O.CAN.KBOX.SR.W.0005.000000T0000Z-260927T1400Z/"]
+                },
+            }
+        )
+        bundle = build_alert_bundle([gale, cancelled], [], NOW)
+        self.assertEqual([a.event for a in bundle.active], ["GALE WARNING"])
+        self.assertEqual(bundle.active_flags, (FLAG_GALE_WARNING,))
+        self.assertEqual(bundle.highest_flag, FLAG_GALE_WARNING)
+        self.assertEqual(bundle.highest_lifecycle, "active")
+
+    def test_cancel_message_type_ignored(self) -> None:
+        props = dict(
+            _props("Storm Warning", onset=-2, ends=20), messageType="Cancel"
+        )
+        bundle = build_alert_bundle([props], [], NOW)
+        self.assertEqual(bundle.active, ())
+        self.assertEqual(bundle.highest_flag, FLAG_NONE)
+
+    def test_non_actual_status_ignored(self) -> None:
+        props = dict(_props("Storm Warning", onset=-2, ends=20), status="Test")
+        bundle = build_alert_bundle([props], [], NOW)
+        self.assertEqual(bundle.active, ())
+        self.assertEqual(bundle.highest_flag, FLAG_NONE)
+
+    def test_cancelled_pending_alert_ignored(self) -> None:
+        props = dict(
+            _props("Storm Warning", onset=3, ends=30), response="AllClear"
+        )
+        bundle = build_alert_bundle([], [props], NOW)
+        self.assertEqual(bundle.pending, ())
+
     def test_alert_without_onset_counts_as_pending(self) -> None:
         bundle = build_alert_bundle([], [_props("Gale Warning", ends=10)], NOW)
         self.assertEqual(len(bundle.pending), 1)

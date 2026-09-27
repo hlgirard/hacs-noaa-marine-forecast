@@ -96,7 +96,6 @@ class TestLoadFlagImage(unittest.TestCase):
 
 class TestAssetDirectory(unittest.TestCase):
     """The asset directory ships with the integration."""
-
     def test_directory_exists(self) -> None:
         self.assertTrue(ASSET_DIR.is_dir())
 
@@ -117,6 +116,108 @@ class TestAssetDirectory(unittest.TestCase):
                 self.assertTrue(
                     root.tag.endswith("svg"), f"{path.name} is not an SVG root"
                 )
+
+
+class TestBrandIcon(unittest.TestCase):
+    """The integration's brand icon is the storm warning flag.
+
+    Home Assistant serves ``brand/icon.png`` for the integration (with
+    ``logo.png`` and ``@2x`` variants falling back to it), so a single
+    file covers every surface.
+
+    Pixel comparison is stdlib-only (``struct``/``zlib``) so this test
+    also runs in the dependency-free fast tier.
+    """
+
+    def test_brand_icon_is_storm_warning_flag(self) -> None:
+        brand_icon = ASSET_DIR.parent.parent / "brand" / "icon.png"
+        self.assertTrue(brand_icon.is_file(), "missing brand/icon.png")
+        flag_pixels, flag_size = _read_png_rgba(
+            asset_path("storm_warning")
+        )
+        icon_pixels, icon_size = _read_png_rgba(brand_icon)
+        self.assertEqual(icon_size, (256, 256))
+        scale_x = icon_size[0] // flag_size[0]
+        scale_y = icon_size[1] // flag_size[1]
+        self.assertEqual(
+            (icon_size[0] % flag_size[0], icon_size[1] % flag_size[1]), (0, 0)
+        )
+        for y in range(flag_size[1]):
+            for x in range(flag_size[0]):
+                expected = bytes(flag_pixels[(y * flag_size[0] + x) * 4 :][:4])
+                # Nearest-neighbour upscale: every pixel in the block is
+                # identical, so sampling the block origin suffices.
+                ix, iy = x * scale_x, y * scale_y
+                actual = bytes(icon_pixels[(iy * icon_size[0] + ix) * 4 :][:4])
+                self.assertEqual(
+                    actual,
+                    expected,
+                    "brand/icon.png diverged from the storm "
+                    f"warning flag at {ix},{iy}",
+                )
+
+
+def _read_png_rgba(path) -> tuple[bytearray, tuple[int, int]]:
+    """Decode an 8-bit non-interlaced RGBA PNG with the standard library."""
+    import struct
+    import zlib
+
+    data = Path(path).read_bytes()
+    assert data[:8] == b"\x89PNG\r\n\x1a\n", f"{path} is not a PNG"
+    pos = 8
+    width = height = 0
+    header = (0, 0, 0)
+    raw_bands = bytearray()
+    while pos < len(data):
+        (length,) = struct.unpack(">I", data[pos : pos + 4])
+        kind = data[pos + 4 : pos + 8]
+        chunk = data[pos + 8 : pos + 8 + length]
+        if kind == b"IHDR":
+            width, height, bit_depth, color_type, _, _, interlace = (
+                struct.unpack(">IIBBBBB", chunk)
+            )
+            header = (bit_depth, color_type, interlace)
+        elif kind == b"IDAT":
+            raw_bands += chunk
+        elif kind == b"IEND":
+            break
+        pos += 12 + length
+    assert header == (8, 6, 0), f"{path} must be 8-bit non-interlaced RGBA"
+    raw = zlib.decompress(bytes(raw_bands))
+    channels = 4
+    stride = width * channels
+    pixels = bytearray(width * height * channels)
+    prev = bytearray(stride)
+    offset = 0
+    for y in range(height):
+        filter_type = raw[offset]
+        offset += 1
+        line = bytearray(raw[offset : offset + stride])
+        offset += stride
+        if filter_type == 1:  # Sub
+            for i in range(channels, stride):
+                line[i] = (line[i] + line[i - channels]) & 0xFF
+        elif filter_type == 2:  # Up
+            for i in range(stride):
+                line[i] = (line[i] + prev[i]) & 0xFF
+        elif filter_type == 3:  # Average
+            for i in range(stride):
+                a = line[i - channels] if i >= channels else 0
+                line[i] = (line[i] + ((a + prev[i]) >> 1)) & 0xFF
+        elif filter_type == 4:  # Paeth
+            for i in range(stride):
+                a = line[i - channels] if i >= channels else 0
+                b = prev[i]
+                c = prev[i - channels] if i >= channels else 0
+                p = a + b - c
+                pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+                pr = a if (pa <= pb and pa <= pc) else (b if pb <= pc else c)
+                line[i] = (line[i] + pr) & 0xFF
+        elif filter_type != 0:
+            raise AssertionError(f"unknown PNG filter {filter_type}")
+        pixels[y * stride : (y + 1) * stride] = line
+        prev = line
+    return pixels, (width, height)
 
 
 if __name__ == "__main__":

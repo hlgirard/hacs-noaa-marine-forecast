@@ -183,6 +183,46 @@ def _is_expired(alert: NormalizedAlert, now: datetime) -> bool:
     return end < now - timedelta(minutes=15)
 
 
+def _is_non_actual(props: dict) -> bool:
+    """Return True when the CAP ``status`` is present and not ``Actual``.
+
+    The zone query already requests ``status=actual``, but the
+    ``/alerts/active`` endpoint is authoritative and unfiltered, so test,
+    exercise, system and draft messages must be ignored here.
+    """
+    status = props.get("status")
+    if status is None:
+        return False
+    return str(status).strip().lower() != "actual"
+
+
+def _is_cancellation(props: dict) -> bool:
+    """Return True when raw CAP properties describe a cancellation.
+
+    NWS marks a cancelled marine warning by re-issuing the event with
+    ``response=AllClear`` (and ``urgency=Past``) plus a ``/O.CAN./`` VTEC
+    code, while keeping ``status=Actual`` and ``messageType=Alert`` -- so
+    the ``/alerts/active`` endpoint keeps returning it until its ``ends``
+    time passes. Without this filter the cancelled event (e.g. ANZ230's
+    "The Storm Warning has been cancelled.") is reported as active and
+    outranks the real replacement warning.
+    """
+    message_type = props.get("messageType") or props.get("message_type")
+    if isinstance(message_type, str) and message_type.strip().lower() == "cancel":
+        return True
+    response = props.get("response")
+    if isinstance(response, str) and response.strip().lower() == "allclear":
+        return True
+    params = props.get("parameters")
+    if isinstance(params, dict):
+        vtec = params.get("VTEC")
+        values = vtec if isinstance(vtec, list) else [vtec]
+        for value in values:
+            if isinstance(value, str) and ".CAN." in value.upper():
+                return True
+    return False
+
+
 def _identity(alert: NormalizedAlert) -> tuple[str, str, str]:
     """Return a stable identity for de-duplicating repeated alert instances."""
     return (
@@ -208,6 +248,8 @@ def build_alert_bundle(
 
     active: list[NormalizedAlert] = []
     for props in active_props:
+        if _is_non_actual(props) or _is_cancellation(props):
+            continue
         alert = normalize_alert(props, LIFECYCLE_ACTIVE, now)
         if is_ignored_event(alert.event) or not is_marine_event(alert.event):
             continue
@@ -216,6 +258,8 @@ def build_alert_bundle(
     seen = {_identity(alert) for alert in active}
     pending: list[NormalizedAlert] = []
     for props in zone_props or []:
+        if _is_non_actual(props) or _is_cancellation(props):
+            continue
         alert = normalize_alert(props, LIFECYCLE_PENDING, now)
         if is_ignored_event(alert.event) or not is_marine_event(alert.event):
             continue
