@@ -162,7 +162,7 @@ created from what the first successful poll returns.
 | --- | --- |
 | Water level | Latest observed level relative to the chosen datum (attributes `datum`, `observed_at`) |
 | Tide state | `rising` or `falling`, from the next predicted high or low |
-| Next tide | `high` or `low`; attributes `time`, `level` (in your chosen tide level unit, relative to `datum`), `level_unit` and `datum` for the next predicted extreme |
+| Next tide | `high` or `low`; attributes `time`, `level` (in your chosen tide level unit, relative to `datum`), `level_unit`, `datum` and `display` (local time without date plus level and unit, e.g. `06:30 · 8.6 ft`) for the next predicted extreme |
 | Next high tide / Next low tide | Timestamp of the next predicted extreme |
 | Next high tide level / Next low tide level | Predicted height at that extreme |
 | Air temperature, Water temperature | Latest observation |

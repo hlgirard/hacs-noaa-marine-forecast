@@ -98,11 +98,11 @@ class TideData:
 METERS_TO_FEET = 3.280839895
 
 
-def convert_level(meters: float, unit: str) -> float:
-    """Convert a level in metres to ``unit`` (``m`` or ``ft``)."""
+def convert_level(meters: float, unit: str, digits: int = 3) -> float:
+    """Convert a level in metres to ``unit`` (``m`` or ``ft``), rounded."""
     if unit == "ft":
-        return round(meters * METERS_TO_FEET, 3)
-    return round(meters, 3)
+        return round(meters * METERS_TO_FEET, digits)
+    return round(meters, digits)
 
 
 def _to_float(value: Any) -> float | None:

@@ -125,6 +125,7 @@ class TestTideStation:
 
     async def test_entities_and_states(self, hass, mock_coops, freezer) -> None:
         freezer.move_to("2026-11-13 05:00:00+00:00")
+        await hass.config.async_set_time_zone("America/New_York")
         mock_coops()
         await _configure(hass, "tide_station", {CONF_STATION_ID: TIDE_ID})
         prefix = f"tide_{TIDE_ID}"
@@ -136,9 +137,11 @@ class TestTideStation:
         nxt = hass.states.get(_entity_id(hass, prefix, "next_tide"))
         assert nxt.state == "high"
         assert nxt.attributes["time"].isoformat() == "2026-11-13T06:30:00+00:00"
-        assert nxt.attributes["level"] == pytest.approx(2.621)
+        assert nxt.attributes["level"] == 2.6
         assert nxt.attributes["level_unit"] == "m"
         assert nxt.attributes["datum"] == "MLLW"
+        # 06:30 UTC is 01:30 in New York (EST); the display text is local time.
+        assert nxt.attributes["display"] == "01:30 \u00b7 2.6 m"
         assert (
             hass.states.get(_entity_id(hass, prefix, "next_high_tide")).state
             == "2026-11-13T06:30:00+00:00"
@@ -163,13 +166,15 @@ class TestTideStation:
 
     async def test_level_unit_feet(self, hass, mock_coops, freezer) -> None:
         freezer.move_to("2026-11-13 05:00:00+00:00")
+        await hass.config.async_set_time_zone("UTC")
         mock_coops()
         await _configure(
             hass, "tide_station", {CONF_STATION_ID: TIDE_ID, "level_unit": "ft"}
         )
         nxt = hass.states.get(_entity_id(hass, f"tide_{TIDE_ID}", "next_tide"))
+        assert nxt.attributes["display"] == "06:30 \u00b7 8.6 ft"
         assert nxt.attributes["level_unit"] == "ft"
-        assert nxt.attributes["level"] == pytest.approx(2.621 * 3.280839895, abs=1e-3)
+        assert nxt.attributes["level"] == 8.6
 
     async def test_auto_follows_home_assistant_units(
         self, hass, mock_coops, freezer
@@ -298,5 +303,14 @@ def test_tide_numeric_sensors_default_to_one_decimal() -> None:
 
     numeric = [d for d in TIDE_SENSORS if d.native_unit_of_measurement]
     assert len(numeric) == 9  # levels, temperatures, pressure, wind
+    for description in numeric:
+        assert description.suggested_display_precision == 1, description.key
+
+
+def test_buoy_numeric_sensors_default_to_one_decimal() -> None:
+    from custom_components.noaa_marine_forecast.obs_sensor import BUOY_SENSORS
+
+    numeric = [d for d in BUOY_SENSORS if d.native_unit_of_measurement]
+    assert len(numeric) == 11  # wind, waves, pressure, temperatures
     for description in numeric:
         assert description.suggested_display_precision == 1, description.key

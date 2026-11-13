@@ -102,10 +102,14 @@ def _next_tide_attributes(data: TideData) -> dict[str, Any] | None:
     prediction = data.upcoming_tide(dt_util.utcnow())
     if prediction is None:
         return None
+    level = convert_level(prediction.value, data.level_unit, 1)
+    local_time = dt_util.as_local(prediction.time).strftime("%H:%M")
     return {
         "time": prediction.time,
-        "level": convert_level(prediction.value, data.level_unit),
+        "level": level,
         "level_unit": data.level_unit,
+        # Compact text for cards: local time only, plus level and unit.
+        "display": f"{local_time} \u00b7 {level:.1f} {data.level_unit}",
         "datum": data.datum,
     }
 
@@ -270,6 +274,7 @@ def _buoy_attrs(column: str) -> Callable[[BuoyData], dict[str, Any] | None]:
 def _buoy(
     key: str, column: str, **kwargs: Any
 ) -> ObsSensorDescription:
+    kwargs.setdefault("suggested_display_precision", 1)
     return ObsSensorDescription(
         key=key,
         translation_key=key,

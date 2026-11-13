@@ -80,6 +80,8 @@ class TestConvertLevel(unittest.TestCase):
         self.assertEqual(tides.convert_level(1.0, "m"), 1.0)
         self.assertEqual(tides.convert_level(1.0, "ft"), 3.281)
         self.assertEqual(tides.convert_level(-0.5, "ft"), -1.64)
+        self.assertEqual(tides.convert_level(2.621, "ft", 1), 8.6)
+        self.assertEqual(tides.convert_level(2.621, "m", 1), 2.6)
 
 
 class TestPredictions(unittest.TestCase):
