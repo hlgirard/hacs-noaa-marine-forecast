@@ -409,3 +409,21 @@ class TestProductMenu:
         )
         assert result["type"] == "form"
         assert result["step_id"] == step
+
+
+class TestZoneOptionsHaveNoTideFields:
+    async def test_zone_options_schema(self, hass, mock_noaa) -> None:
+        mock_noaa()
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            version=2,
+            data={
+                "product_type": "marine_zone",
+                CONF_ZONE_ID: ZONE,
+                CONF_NAME: ZONE_NAME,
+            },
+            unique_id=f"marine_zone:{ZONE.lower()}",
+        )
+        entry.add_to_hass(hass)
+        flow = await hass.config_entries.options.async_init(entry.entry_id)
+        assert "level_unit" not in flow["data_schema"].schema

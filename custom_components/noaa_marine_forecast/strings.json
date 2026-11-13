@@ -20,11 +20,12 @@
       },
       "tide_station": {
         "title": "Tide station",
-        "description": "Add a NOAA CO-OPS tide station by its 7-digit ID, for example {example}. Use IGLD as the datum for Great Lakes stations.",
+        "description": "Add a NOAA CO-OPS tide station by its 7-digit ID, for example {example}. Use IGLD as the datum for Great Lakes stations. The unit applies to the level attributes of the Next tide sensor.",
         "data": {
           "station_id": "Station ID",
           "name": "Name (optional)",
-          "datum": "Vertical datum"
+          "datum": "Vertical datum",
+          "level_unit": "Tide level unit (auto follows Home Assistant)"
         }
       },
       "buoy": {
@@ -51,7 +52,8 @@
         "title": "NOAA Marine Forecast options",
         "data": {
           "name": "Name",
-          "scan_interval": "Update interval (minutes, minimum 1)"
+          "scan_interval": "Update interval (minutes, minimum 1)",
+          "level_unit": "Tide level unit (tide stations only)"
         }
       }
     }

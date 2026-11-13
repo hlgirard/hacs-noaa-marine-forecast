@@ -75,6 +75,13 @@ class TestReadings(unittest.TestCase):
         self.assertEqual(reading.extra, {"gust": 7.2, "direction": 270.0})
 
 
+class TestConvertLevel(unittest.TestCase):
+    def test_conversions(self) -> None:
+        self.assertEqual(tides.convert_level(1.0, "m"), 1.0)
+        self.assertEqual(tides.convert_level(1.0, "ft"), 3.281)
+        self.assertEqual(tides.convert_level(-0.5, "ft"), -1.64)
+
+
 class TestPredictions(unittest.TestCase):
     def setUp(self) -> None:
         self.data = tides.TideData(

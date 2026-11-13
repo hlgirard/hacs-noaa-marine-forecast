@@ -31,7 +31,7 @@ from homeassistant.util import dt as dt_util
 
 from .buoy import BuoyData
 from .device import build_device_info, entity_prefix
-from .tides import TIDE_HIGH, TIDE_LOW, TideData
+from .tides import TIDE_HIGH, TIDE_LOW, TideData, convert_level
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -98,14 +98,14 @@ def _next_tide_kind(data: TideData) -> str | None:
 
 
 def _next_tide_attributes(data: TideData) -> dict[str, Any] | None:
-    """Time and level of the next tide (level in metres, relative to datum)."""
+    """Time and level of the next tide, in the entry's chosen level unit."""
     prediction = data.upcoming_tide(dt_util.utcnow())
     if prediction is None:
         return None
     return {
         "time": prediction.time,
-        "level": prediction.value,
-        "level_unit": "m",
+        "level": convert_level(prediction.value, data.level_unit),
+        "level_unit": data.level_unit,
         "datum": data.datum,
     }
 
@@ -129,7 +129,7 @@ TIDE_SENSORS: tuple[ObsSensorDescription, ...] = (
         device_class=SensorDeviceClass.DISTANCE,
         native_unit_of_measurement=UnitOfLength.METERS,
         state_class=SensorStateClass.MEASUREMENT,
-        suggested_display_precision=2,
+        suggested_display_precision=1,
         value_fn=_reading_value("water_level"),
         present_fn=_has_reading("water_level"),
         attributes_fn=lambda data: {
@@ -166,7 +166,7 @@ TIDE_SENSORS: tuple[ObsSensorDescription, ...] = (
         translation_key="next_high_tide_level",
         device_class=SensorDeviceClass.DISTANCE,
         native_unit_of_measurement=UnitOfLength.METERS,
-        suggested_display_precision=2,
+        suggested_display_precision=1,
         value_fn=_next_tide(TIDE_HIGH, "value"),
         present_fn=_has_predictions,
     ),
@@ -182,7 +182,7 @@ TIDE_SENSORS: tuple[ObsSensorDescription, ...] = (
         translation_key="next_low_tide_level",
         device_class=SensorDeviceClass.DISTANCE,
         native_unit_of_measurement=UnitOfLength.METERS,
-        suggested_display_precision=2,
+        suggested_display_precision=1,
         value_fn=_next_tide(TIDE_LOW, "value"),
         present_fn=_has_predictions,
     ),
@@ -190,6 +190,7 @@ TIDE_SENSORS: tuple[ObsSensorDescription, ...] = (
         key="air_temperature",
         translation_key="air_temperature",
         device_class=SensorDeviceClass.TEMPERATURE,
+        suggested_display_precision=1,
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=_reading_value("air_temperature"),
@@ -199,6 +200,7 @@ TIDE_SENSORS: tuple[ObsSensorDescription, ...] = (
         key="water_temperature",
         translation_key="water_temperature",
         device_class=SensorDeviceClass.TEMPERATURE,
+        suggested_display_precision=1,
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=_reading_value("water_temperature"),
@@ -208,6 +210,7 @@ TIDE_SENSORS: tuple[ObsSensorDescription, ...] = (
         key="pressure",
         translation_key="pressure",
         device_class=SensorDeviceClass.ATMOSPHERIC_PRESSURE,
+        suggested_display_precision=1,
         native_unit_of_measurement=UnitOfPressure.HPA,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=_reading_value("air_pressure"),
@@ -217,6 +220,7 @@ TIDE_SENSORS: tuple[ObsSensorDescription, ...] = (
         key="wind_speed",
         translation_key="wind_speed",
         device_class=SensorDeviceClass.WIND_SPEED,
+        suggested_display_precision=1,
         native_unit_of_measurement=UnitOfSpeed.METERS_PER_SECOND,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=_reading_value("wind"),
@@ -226,6 +230,7 @@ TIDE_SENSORS: tuple[ObsSensorDescription, ...] = (
         key="wind_gust",
         translation_key="wind_gust",
         device_class=SensorDeviceClass.WIND_SPEED,
+        suggested_display_precision=1,
         native_unit_of_measurement=UnitOfSpeed.METERS_PER_SECOND,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=_reading_value("wind", "gust"),
@@ -234,6 +239,7 @@ TIDE_SENSORS: tuple[ObsSensorDescription, ...] = (
     ObsSensorDescription(
         key="wind_direction",
         translation_key="wind_direction",
+        suggested_display_precision=1,
         native_unit_of_measurement=DEGREE,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=_reading_value("wind", "direction"),

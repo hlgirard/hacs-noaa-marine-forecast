@@ -92,6 +92,7 @@ class TestTideStation:
             CONF_STATION_ID: TIDE_ID,
             CONF_NAME: "Boston",
             CONF_DATUM: "MLLW",
+            "level_unit": "auto",
         }
         assert result["result"].unique_id == f"tide_station:{TIDE_ID}"
         assert result["result"].state is ConfigEntryState.LOADED
@@ -159,6 +160,42 @@ class TestTideStation:
         # Products the station did not return data for create no entities.
         assert _entity_id(hass, prefix, "wind_speed") is None
         assert _entity_id(hass, prefix, "water_temperature") is None
+
+    async def test_level_unit_feet(self, hass, mock_coops, freezer) -> None:
+        freezer.move_to("2026-11-13 05:00:00+00:00")
+        mock_coops()
+        await _configure(
+            hass, "tide_station", {CONF_STATION_ID: TIDE_ID, "level_unit": "ft"}
+        )
+        nxt = hass.states.get(_entity_id(hass, f"tide_{TIDE_ID}", "next_tide"))
+        assert nxt.attributes["level_unit"] == "ft"
+        assert nxt.attributes["level"] == pytest.approx(2.621 * 3.280839895, abs=1e-3)
+
+    async def test_auto_follows_home_assistant_units(
+        self, hass, mock_coops, freezer
+    ) -> None:
+        from homeassistant.util.unit_system import US_CUSTOMARY_SYSTEM
+
+        hass.config.units = US_CUSTOMARY_SYSTEM
+        freezer.move_to("2026-11-13 05:00:00+00:00")
+        mock_coops()
+        await _configure(hass, "tide_station", {CONF_STATION_ID: TIDE_ID})
+        nxt = hass.states.get(_entity_id(hass, f"tide_{TIDE_ID}", "next_tide"))
+        assert nxt.attributes["level_unit"] == "ft"
+
+    async def test_options_flow_changes_unit(self, hass, mock_coops, freezer) -> None:
+        freezer.move_to("2026-11-13 05:00:00+00:00")
+        mock_coops()
+        result = await _configure(hass, "tide_station", {CONF_STATION_ID: TIDE_ID})
+        entry = result["result"]
+        flow = await hass.config_entries.options.async_init(entry.entry_id)
+        assert "level_unit" in flow["data_schema"].schema
+        await hass.config_entries.options.async_configure(
+            flow["flow_id"], {"level_unit": "ft", "scan_interval": 10}
+        )
+        await hass.async_block_till_done()
+        nxt = hass.states.get(_entity_id(hass, f"tide_{TIDE_ID}", "next_tide"))
+        assert nxt.attributes["level_unit"] == "ft"
 
     async def test_station_without_water_level(self, hass, mock_coops) -> None:
         mock_coops(water_level="coops_no_data.json")
@@ -254,3 +291,12 @@ class TestBuoy:
         entry.add_to_hass(hass)
         await hass.config_entries.async_setup(entry.entry_id)
         assert entry.state is ConfigEntryState.SETUP_RETRY
+
+
+def test_tide_numeric_sensors_default_to_one_decimal() -> None:
+    from custom_components.noaa_marine_forecast.obs_sensor import TIDE_SENSORS
+
+    numeric = [d for d in TIDE_SENSORS if d.native_unit_of_measurement]
+    assert len(numeric) == 9  # levels, temperatures, pressure, wind
+    for description in numeric:
+        assert description.suggested_display_precision == 1, description.key

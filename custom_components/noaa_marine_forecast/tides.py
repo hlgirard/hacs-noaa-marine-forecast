@@ -64,6 +64,9 @@ class TideData:
     readings: dict[str, Reading]
     predictions: tuple[TidePrediction, ...]
     datum: str
+    #: Unit for level attributes (``m`` or ``ft``); sensor states stay metric
+    #: and are converted by Home Assistant.
+    level_unit: str = "m"
 
     @property
     def available_products(self) -> set[str]:
@@ -90,6 +93,16 @@ class TideData:
         if not upcoming:
             return None
         return "rising" if upcoming[0].kind == TIDE_HIGH else "falling"
+
+
+METERS_TO_FEET = 3.280839895
+
+
+def convert_level(meters: float, unit: str) -> float:
+    """Convert a level in metres to ``unit`` (``m`` or ``ft``)."""
+    if unit == "ft":
+        return round(meters * METERS_TO_FEET, 3)
+    return round(meters, 3)
 
 
 def _to_float(value: Any) -> float | None:

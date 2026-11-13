@@ -25,6 +25,9 @@ PRODUCT_PLATFORMS: Final[dict[str, list[str]]] = {
 CONF_ZONE_ID: Final = "zone_id"
 CONF_STATION_ID: Final = "station_id"
 CONF_DATUM: Final = "datum"
+CONF_LEVEL_UNIT: Final = "level_unit"
+LEVEL_UNIT_AUTO: Final = "auto"
+LEVEL_UNITS: Final[list[str]] = ["auto", "m", "ft"]
 CONF_NAME: Final = "name"
 CONF_SCAN_INTERVAL: Final = "scan_interval"
 

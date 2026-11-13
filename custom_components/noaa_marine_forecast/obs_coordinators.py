@@ -7,6 +7,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import UnitOfLength
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
@@ -20,11 +21,13 @@ from .api import (
 from .buoy import BuoyData, build_buoy_data
 from .const import (
     CONF_DATUM,
+    CONF_LEVEL_UNIT,
     CONF_NAME,
     CONF_SCAN_INTERVAL,
     CONF_STATION_ID,
     DEFAULT_DATUM,
     DEFAULT_SCAN_INTERVAL_MINUTES,
+    LEVEL_UNIT_AUTO,
     MIN_SCAN_INTERVAL_MINUTES,
 )
 from .tides import (
@@ -60,6 +63,17 @@ class TideCoordinator(DataUpdateCoordinator[TideData]):
             update_interval=_interval(entry),
             config_entry=entry,
         )
+
+    def _level_unit(self) -> str:
+        """Resolve the level unit: entry option, else Home Assistant's units."""
+        entry = self.config_entry
+        choice = entry.options.get(
+            CONF_LEVEL_UNIT, entry.data.get(CONF_LEVEL_UNIT, LEVEL_UNIT_AUTO)
+        )
+        if choice in ("m", "ft"):
+            return choice
+        imperial = self.hass.config.units.length_unit == UnitOfLength.MILES
+        return "ft" if imperial else "m"
 
     async def _async_update_data(self) -> TideData:
         now = datetime.now(UTC)
@@ -106,6 +120,7 @@ class TideCoordinator(DataUpdateCoordinator[TideData]):
             readings=readings,
             predictions=predictions,
             datum=self.datum,
+            level_unit=self._level_unit(),
         )
 
 

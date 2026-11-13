@@ -45,6 +45,7 @@ then choose a product type.
 | Station ID | `8443970` | 7 digits; find yours at [tidesandcurrents.noaa.gov](https://tidesandcurrents.noaa.gov/) |
 | Name | `Boston` | Optional; defaults to the station's NOAA name |
 | Vertical datum | `MLLW` | Reference for water level and predictions. Use `IGLD` for Great Lakes stations |
+| Tide level unit | `auto` | `auto` follows Home Assistant's unit system, or choose `m` / `ft`. Applies to the `level` attribute of *Next tide*; also changeable under **Configure** |
 
 ### Buoy or coastal weather station
 
@@ -161,7 +162,7 @@ created from what the first successful poll returns.
 | --- | --- |
 | Water level | Latest observed level relative to the chosen datum (attributes `datum`, `observed_at`) |
 | Tide state | `rising` or `falling`, from the next predicted high or low |
-| Next tide | `high` or `low`; attributes `time`, `level` (metres, relative to `datum`), `level_unit` and `datum` for the next predicted extreme |
+| Next tide | `high` or `low`; attributes `time`, `level` (in your chosen tide level unit, relative to `datum`), `level_unit` and `datum` for the next predicted extreme |
 | Next high tide / Next low tide | Timestamp of the next predicted extreme |
 | Next high tide level / Next low tide level | Predicted height at that extreme |
 | Air temperature, Water temperature | Latest observation |
@@ -170,8 +171,9 @@ created from what the first successful poll returns.
 | Station ID | The configured station ID, with a `station_name` attribute (diagnostic) |
 | Checked at | Last successful poll (diagnostic) |
 
-Values are fetched in metric and converted by Home Assistant to your unit
-system. Predicted tides cover roughly the next two days.
+Sensor states are fetched in metric and converted by Home Assistant to your
+unit system (override per entity in its settings). Attributes are not converted
+by Home Assistant, which is why *Next tide* has its own unit option. Predicted tides cover roughly the next two days.
 
 ### Buoy or coastal weather station
 

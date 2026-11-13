@@ -31,7 +31,10 @@ from .const import (
     CONF_STATION_ID,
     CONF_ZONE_ID,
     CONF_DATUM,
+    CONF_LEVEL_UNIT,
     COOPS_DATUMS,
+    LEVEL_UNIT_AUTO,
+    LEVEL_UNITS,
     DEFAULT_DATUM,
     PRODUCT_BUOY,
     PRODUCT_TIDE_STATION,
@@ -61,6 +64,7 @@ STEP_TIDE_SCHEMA = vol.Schema(
         vol.Required(CONF_STATION_ID): cv.string,
         vol.Optional(CONF_NAME): cv.string,
         vol.Optional(CONF_DATUM, default=DEFAULT_DATUM): vol.In(COOPS_DATUMS),
+        vol.Optional(CONF_LEVEL_UNIT, default=LEVEL_UNIT_AUTO): vol.In(LEVEL_UNITS),
     }
 )
 STEP_BUOY_SCHEMA = vol.Schema(
@@ -179,6 +183,9 @@ class MarineForecastConfigFlow(ConfigFlow, domain=DOMAIN):
                             CONF_STATION_ID: station_id,
                             CONF_NAME: name,
                             CONF_DATUM: user_input.get(CONF_DATUM, DEFAULT_DATUM),
+                            CONF_LEVEL_UNIT: user_input.get(
+                                CONF_LEVEL_UNIT, LEVEL_UNIT_AUTO
+                            ),
                         },
                     )
         return self.async_show_form(
@@ -247,14 +254,19 @@ class MarineForecastOptionsFlow(OptionsFlow):
         interval = self._entry.options.get(
             CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_MINUTES
         )
-        schema = vol.Schema(
-            {
-                vol.Optional(CONF_NAME, default=current): cv.string,
-                vol.Optional(
-                    CONF_SCAN_INTERVAL, default=interval
-                ): vol.All(cv.positive_int, vol.Coerce(int)),
-            }
-        )
+        fields: dict[Any, Any] = {
+            vol.Optional(CONF_NAME, default=current): cv.string,
+            vol.Optional(
+                CONF_SCAN_INTERVAL, default=interval
+            ): vol.All(cv.positive_int, vol.Coerce(int)),
+        }
+        if self._entry.data.get(CONF_PRODUCT_TYPE) == PRODUCT_TIDE_STATION:
+            unit = self._entry.options.get(
+                CONF_LEVEL_UNIT,
+                self._entry.data.get(CONF_LEVEL_UNIT, LEVEL_UNIT_AUTO),
+            )
+            fields[vol.Optional(CONF_LEVEL_UNIT, default=unit)] = vol.In(LEVEL_UNITS)
+        schema = vol.Schema(fields)
         return self.async_show_form(
             step_id="init",
             data_schema=schema,
