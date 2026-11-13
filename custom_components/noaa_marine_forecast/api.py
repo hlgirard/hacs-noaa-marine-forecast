@@ -21,8 +21,12 @@ _LOGGER = logging.getLogger(__name__)
 VALID_ZONE_CHARS = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
 
 
-class NOAAForecastError(Exception):
+class NOAAError(Exception):
     """Raised when a NOAA request fails."""
+
+
+# Backward-compatible alias.
+NOAAForecastError = NOAAError
 
 
 def normalize_zone_id(zone_id: str) -> str:

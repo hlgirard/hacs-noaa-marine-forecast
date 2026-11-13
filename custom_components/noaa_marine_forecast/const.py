@@ -10,6 +10,14 @@ INTEGRATION_NAME: Final = "NOAA Marine Forecast"
 
 PLATFORMS: Final[list[str]] = ["sensor", "image"]
 
+CONF_PRODUCT_TYPE: Final = "product_type"
+PRODUCT_MARINE_ZONE: Final = "marine_zone"
+DEFAULT_PRODUCT_TYPE: Final = PRODUCT_MARINE_ZONE
+# Platforms forwarded for each product type.
+PRODUCT_PLATFORMS: Final[dict[str, list[str]]] = {
+    PRODUCT_MARINE_ZONE: ["sensor", "image"],
+}
+
 CONF_ZONE_ID: Final = "zone_id"
 CONF_NAME: Final = "name"
 CONF_SCAN_INTERVAL: Final = "scan_interval"

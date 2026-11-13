@@ -61,7 +61,11 @@ class TestUserStep:
 
         assert result["type"] == "create_entry"
         assert result["title"] == f"{ZONE_NAME} {ZONE}"
-        assert result["data"] == {CONF_ZONE_ID: ZONE, CONF_NAME: ZONE_NAME}
+        assert result["data"] == {
+            "product_type": "marine_zone",
+            CONF_ZONE_ID: ZONE,
+            CONF_NAME: ZONE_NAME,
+        }
 
     async def test_normalizes_zone_id_case(self, hass, mock_noaa) -> None:
         """A lower case zone is upper cased before it is stored."""
@@ -89,7 +93,7 @@ class TestUserStep:
             result["flow_id"], {CONF_ZONE_ID: ZONE, CONF_NAME: ZONE_NAME}
         )
         await hass.async_block_till_done()
-        assert result["result"].unique_id == ZONE.lower()
+        assert result["result"].unique_id == f"marine_zone:{ZONE.lower()}"
 
 
 class TestUserStepValidation:
@@ -136,7 +140,8 @@ class TestDuplicate:
         MockConfigEntry(
             domain=DOMAIN,
             data={CONF_ZONE_ID: ZONE, CONF_NAME: ZONE_NAME},
-            unique_id=ZONE.lower(),
+            unique_id=f"marine_zone:{ZONE.lower()}",
+            version=2,
         ).add_to_hass(hass)
 
         result = await start_user_flow(hass)
@@ -156,10 +161,11 @@ class TestOptionsFlow:
         entry = MockConfigEntry(
             domain=DOMAIN,
             data={CONF_ZONE_ID: ZONE, CONF_NAME: ZONE_NAME},
-            unique_id=ZONE.lower(),
+            unique_id=f"marine_zone:{ZONE.lower()}",
+            version=2,
         )
         entry.add_to_hass(hass)
-        assert entry.unique_id == ZONE.lower()
+        assert entry.unique_id == f"marine_zone:{ZONE.lower()}"
         return entry
 
     def test_get_options_flow_is_a_staticmethod(self, hass) -> None:
@@ -226,7 +232,7 @@ class TestOptionsFlow:
         """
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
-        assert hass.data[DOMAIN][entry.entry_id].update_interval == timedelta(
+        assert entry.runtime_data.update_interval == timedelta(
             minutes=DEFAULT_SCAN_INTERVAL_MINUTES
         )
 
@@ -236,7 +242,7 @@ class TestOptionsFlow:
         )
         await hass.async_block_till_done()
 
-        coordinator = hass.data[DOMAIN][entry.entry_id]
+        coordinator = entry.runtime_data
         assert coordinator.update_interval == timedelta(minutes=45), (
             "the new interval was stored but the coordinator still polls on "
             f"{coordinator.update_interval}"
@@ -279,7 +285,8 @@ class TestScanInterval:
         entry = MockConfigEntry(
             domain=DOMAIN,
             data={CONF_ZONE_ID: ZONE, CONF_NAME: ZONE_NAME},
-            unique_id=ZONE.lower(),
+            unique_id=f"marine_zone:{ZONE.lower()}",
+            version=2,
         )
         entry.add_to_hass(hass)
         assert await hass.config_entries.async_setup(entry.entry_id)
@@ -293,7 +300,7 @@ class TestScanInterval:
 
         assert result["type"] == "create_entry"
         assert entry.options[CONF_SCAN_INTERVAL] == 0
-        coordinator = hass.data[DOMAIN][entry.entry_id]
+        coordinator = entry.runtime_data
         assert coordinator.update_interval == timedelta(
             minutes=MIN_SCAN_INTERVAL_MINUTES
         )
@@ -348,7 +355,28 @@ class TestEndToEnd:
 
         # The entity registry entry survives an unload, so Home Assistant
         # leaves a restored placeholder rather than deleting the state.
-        assert entry.entry_id not in hass.data.get(DOMAIN, {})
+        assert entry.state.name == "NOT_LOADED"
         assert entry.state is ConfigEntryState.NOT_LOADED
         leftover = hass.states.get("sensor.boston_harbor_anz230_alert_flags")
         assert leftover is None or leftover.state == "unavailable"
+
+
+class TestMigration:
+    """v1 entries (no product type) migrate to v2."""
+
+    async def test_v1_entry_migrates(self, hass, mock_noaa) -> None:
+        mock_noaa()
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            data={CONF_ZONE_ID: ZONE, CONF_NAME: ZONE_NAME},
+            unique_id=ZONE.lower(),
+            version=1,
+        )
+        entry.add_to_hass(hass)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+        assert entry.version == 2
+        assert entry.data["product_type"] == "marine_zone"
+        assert entry.unique_id == f"marine_zone:{ZONE.lower()}"
+        assert hass.states.get("sensor.boston_harbor_anz230_zone_name")

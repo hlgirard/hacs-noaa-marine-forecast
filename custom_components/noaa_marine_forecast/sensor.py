@@ -23,7 +23,8 @@ from homeassistant.helpers.update_coordinator import (
 )
 from homeassistant.util import dt as dt_util
 
-from .const import CONF_NAME, CONF_ZONE_ID, DEFAULT_NAME, DOMAIN
+from .const import DOMAIN
+from .device import build_device_info, entity_prefix
 from .coordinator import MarineZoneData
 from .flags import FLAG_TITLES
 from .alerts import format_alert_text, top_alert_detail
@@ -286,15 +287,9 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up the sensors for a config entry."""
-    coordinator: DataUpdateCoordinator[MarineZoneData] = (
-        hass.data[DOMAIN][entry.entry_id]
-    )
-    zone_id = entry.data[CONF_ZONE_ID]
-    name = entry.data.get(CONF_NAME) or DEFAULT_NAME
-
+    coordinator: DataUpdateCoordinator[MarineZoneData] = entry.runtime_data
     entities = [
-        MarineSensor(coordinator, description, zone_id, name)
-        for description in SENSORS
+        MarineSensor(coordinator, description, entry) for description in SENSORS
     ]
     async_add_entities(entities)
 
@@ -309,21 +304,14 @@ class MarineSensor(CoordinatorEntity[MarineZoneData], SensorEntity):
         self,
         coordinator: DataUpdateCoordinator[MarineZoneData],
         description: MarineSensorDescription,
-        zone_id: str,
-        name: str,
+        entry: ConfigEntry,
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)
         self.entity_description = description
-        self._zone_id = zone_id
-        self._attr_unique_id = f"{zone_id.lower()}_{description.key}"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, zone_id.lower())},
-            "name": f"{name} {zone_id}",
-            "manufacturer": "NOAA / NWS",
-            "model": "Coastal Waters Forecast",
-            "configuration_url": f"https://tgftp.nws.noaa.gov/data/forecasts/marine/coastal/{zone_id[:2].lower()}/{zone_id.lower()}.txt",
-        }
+        self._prefix = entity_prefix(entry)
+        self._attr_unique_id = f"{self._prefix}_{description.key}"
+        self._attr_device_info = build_device_info(entry)
 
     @property
     def native_value(self) -> Any:
@@ -364,7 +352,7 @@ class MarineSensor(CoordinatorEntity[MarineZoneData], SensorEntity):
 
             registry = er.async_get(hass)
             entity_id = registry.async_get_entity_id(
-                "image", DOMAIN, f"{self._zone_id.lower()}_alert_flag_image"
+                "image", DOMAIN, f"{self._prefix}_alert_flag_image"
             )
             if entity_id is None:
                 return None

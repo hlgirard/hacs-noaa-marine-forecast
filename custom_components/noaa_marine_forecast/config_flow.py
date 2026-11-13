@@ -17,12 +17,14 @@ import homeassistant.helpers.config_validation as cv
 from .api import NOAAForecastError, async_fetch_forecast, forecast_url
 from .const import (
     CONF_NAME,
+    CONF_PRODUCT_TYPE,
     CONF_SCAN_INTERVAL,
     CONF_ZONE_ID,
     DEFAULT_NAME,
     DEFAULT_SCAN_INTERVAL_MINUTES,
     DOMAIN,
     MIN_SCAN_INTERVAL_MINUTES,
+    PRODUCT_MARINE_ZONE,
 )
 from .parser import parse_forecast
 
@@ -60,7 +62,7 @@ async def _async_validate_zone(hass, zone_id: str) -> str | None:
 class MarineForecastConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for NOAA Marine Forecast."""
 
-    VERSION = 1
+    VERSION = 2
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -77,12 +79,16 @@ class MarineForecastConfigFlow(ConfigFlow, domain=DOMAIN):
                 _LOGGER.warning("Rejecting marine zone %s: %s", zone_id, error)
                 errors["base"] = "invalid_zone"
             else:
-                await self.async_set_unique_id(zone_id.lower())
+                await self.async_set_unique_id(f"{PRODUCT_MARINE_ZONE}:{zone_id.lower()}")
                 self._abort_if_unique_id_configured()
                 title = f"{name} {zone_id}"
                 self.context["title_placeholders"] = {"zone": zone_id}
                 return self.async_create_entry(
-                    title=title, data={CONF_ZONE_ID: zone_id, CONF_NAME: name}
+                    title=title, data={
+                        CONF_PRODUCT_TYPE: PRODUCT_MARINE_ZONE,
+                        CONF_ZONE_ID: zone_id,
+                        CONF_NAME: name,
+                    },
                 )
 
         return self.async_show_form(

@@ -34,9 +34,12 @@ def make_image(hass, coordinator):
     """Build a real image entity bound to a real coordinator."""
 
     def _make(name: str = ZONE_NAME) -> MarineFlagImage:
-        return MarineFlagImage(
-            coordinator, hass, coordinator.config_entry, ZONE, name
-        )
+        entry = coordinator.config_entry
+        if name != entry.data.get(CONF_NAME):
+            entry = MockConfigEntry(
+                domain=DOMAIN, data={CONF_ZONE_ID: ZONE, CONF_NAME: name}
+            )
+        return MarineFlagImage(coordinator, hass, entry)
 
     return _make
 
@@ -72,7 +75,7 @@ class TestConstruction:
         entry = MockConfigEntry(
             domain=DOMAIN, data={CONF_ZONE_ID: ZONE, CONF_NAME: "Custom Name"}
         )
-        entity = MarineFlagImage(coordinator, hass, entry, ZONE, "Custom Name")
+        entity = MarineFlagImage(coordinator, hass, entry)
         assert entity.device_info["name"] == f"Custom Name {ZONE}"
 
 

@@ -30,7 +30,9 @@ def _description(key: str):
 def _sensor(hass, coordinator, make_zone_data, key: str, **kwargs) -> MarineSensor:
     """Build a sensor bound to canned zone data."""
     coordinator.async_set_updated_data(make_zone_data(**kwargs))
-    entity = MarineSensor(coordinator, _description(key), ZONE, ZONE_NAME)
+    entity = MarineSensor(
+        coordinator, _description(key), coordinator.config_entry
+    )
     entity.hass = hass
     return entity
 
