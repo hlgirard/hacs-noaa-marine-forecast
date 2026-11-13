@@ -152,10 +152,43 @@ class TestBuoy(unittest.TestCase):
         self.assertEqual(data.value("PRES"), 1000.9)
         self.assertIsNone(data.value("NOPE"))
 
+    def test_truncated_and_short_rows_are_skipped(self) -> None:
+        lines = self.text.splitlines()
+        # Header, a row cut off mid-way, then complete rows.
+        text = "\n".join(lines[:2] + ["2026 11 13 17 20  10  9"] + lines[2:5])
+        observed, readings = buoy.parse_realtime(text)
+        self.assertEqual(observed, datetime(2026, 11, 13, 17, 10, tzinfo=UTC))
+        self.assertEqual(readings["WSPD"].value, 9.0)
+
     def test_rejects_garbage(self) -> None:
         for text in ("", "<html>Not found</html>", "#only header\n"):
             with self.assertRaises(ValueError, msg=text):
                 buoy.parse_realtime(text)
+
+
+class TestIcons(unittest.TestCase):
+    def setUp(self) -> None:
+        base = Path(__file__).parent.parent / "custom_components" / "noaa_marine_forecast"
+        self.icons = json.loads((base / "icons.json").read_text())["entity"]["sensor"]
+        self.strings = json.loads((base / "strings.json").read_text())["entity"]["sensor"]
+
+    def test_tide_state_and_next_tide_icons(self) -> None:
+        self.assertEqual(self.icons["tide_state"]["default"], "mdi:waves")
+        self.assertEqual(
+            self.icons["tide_state"]["state"],
+            {"rising": "mdi:wave-arrow-up", "falling": "mdi:wave-arrow-down"},
+        )
+        self.assertEqual(self.icons["next_tide"]["default"], "mdi:waves")
+        self.assertEqual(
+            self.icons["next_tide"]["state"],
+            {"high": "mdi:wave-arrow-up", "low": "mdi:wave-arrow-down"},
+        )
+
+    def test_icon_states_match_translated_states(self) -> None:
+        for key, entry in self.icons.items():
+            self.assertIn(key, self.strings, key)
+            for state in entry.get("state", {}):
+                self.assertIn(state, self.strings[key]["state"], f"{key}.{state}")
 
 
 if __name__ == "__main__":

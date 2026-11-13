@@ -8,7 +8,8 @@ from datetime import datetime, timedelta, timezone
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfLength
-from homeassistant.core import HomeAssistant
+from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
+from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import (
@@ -19,10 +20,10 @@ from .api import (
     coops_predictions_url,
 )
 from .buoy import BuoyData, build_buoy_data
+from .device import entry_name
 from .const import (
     CONF_DATUM,
     CONF_LEVEL_UNIT,
-    CONF_NAME,
     CONF_SCAN_INTERVAL,
     CONF_STATION_ID,
     DEFAULT_DATUM,
@@ -32,7 +33,9 @@ from .const import (
 )
 from .tides import (
     OBSERVATION_PRODUCTS,
+    Reading,
     TideData,
+    TidePrediction,
     parse_latest_reading,
     parse_predictions,
 )
@@ -54,7 +57,7 @@ class TideCoordinator(DataUpdateCoordinator[TideData]):
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.station_id: str = entry.data[CONF_STATION_ID]
-        self.station_name: str = entry.data.get(CONF_NAME) or self.station_id
+        self.station_name: str = entry_name(entry)
         self.datum: str = entry.data.get(CONF_DATUM, DEFAULT_DATUM)
         super().__init__(
             hass,
@@ -63,6 +66,9 @@ class TideCoordinator(DataUpdateCoordinator[TideData]):
             update_interval=_interval(entry),
             config_entry=entry,
         )
+        self._last_readings: dict[str, Reading] = {}
+        self._last_predictions: tuple[TidePrediction, ...] = ()
+        self._rollover_cancel: CALLBACK_TYPE | None = None
 
     def _level_unit(self) -> str:
         """Resolve the level unit: entry option, else Home Assistant's units."""
@@ -77,13 +83,16 @@ class TideCoordinator(DataUpdateCoordinator[TideData]):
 
     async def _async_update_data(self) -> TideData:
         now = datetime.now(UTC)
-        urls = {
-            product: coops_latest_url(self.station_id, product, self.datum)
-            for product in OBSERVATION_PRODUCTS
-        }
-        pred_url = coops_predictions_url(
-            self.station_id, self.datum, now - timedelta(hours=12)
-        )
+        try:
+            urls = {
+                product: coops_latest_url(self.station_id, product, self.datum)
+                for product in OBSERVATION_PRODUCTS
+            }
+            pred_url = coops_predictions_url(
+                self.station_id, self.datum, now - timedelta(hours=12)
+            )
+        except NOAAError as err:
+            raise UpdateFailed(f"Invalid tide station configuration: {err}") from err
         results = await asyncio.gather(
             *(async_fetch_coops_json(self.hass, url) for url in urls.values()),
             async_fetch_coops_json(self.hass, pred_url),
@@ -97,23 +106,33 @@ class TideCoordinator(DataUpdateCoordinator[TideData]):
                 f"Error fetching tide data for {self.station_id}: {failures[0]}"
             ) from failures[0]
 
-        readings = {}
+        readings: dict[str, Reading] = {}
         for product, result in zip(urls, obs_results):
+            reading = None
             if isinstance(result, Exception):
                 _LOGGER.debug("CO-OPS %s failed: %s", product, result)
-                continue
-            reading = parse_latest_reading(result, product)
+            else:
+                reading = parse_latest_reading(result, product)
+            # Keep the previous value across a gap; sensors expire it by age.
+            reading = reading or self._last_readings.get(product)
             if reading is not None:
                 readings[product] = reading
 
-        predictions = () if isinstance(pred_result, Exception) else parse_predictions(
-            pred_result
-        )
+        predictions: tuple[TidePrediction, ...] = ()
+        if not isinstance(pred_result, Exception):
+            predictions = parse_predictions(pred_result)
+        if not any(p.time > now for p in predictions) and any(
+            p.time > now for p in self._last_predictions
+        ):
+            predictions = self._last_predictions
+
         if not readings and not predictions:
             raise UpdateFailed(
                 f"CO-OPS station {self.station_id} returned no data"
             )
-        return TideData(
+        self._last_readings = readings
+        self._last_predictions = predictions
+        data = TideData(
             station_id=self.station_id,
             name=self.station_name,
             fetched_at=now,
@@ -122,6 +141,37 @@ class TideCoordinator(DataUpdateCoordinator[TideData]):
             datum=self.datum,
             level_unit=self._level_unit(),
         )
+        self._schedule_rollover(data, now)
+        return data
+
+    @callback
+    def _schedule_rollover(self, data: TideData, now: datetime) -> None:
+        """Re-render entities when the next predicted tide passes."""
+        self._cancel_rollover()
+        upcoming = data.upcoming_tide(now)
+        if upcoming is None:
+            return
+        self._rollover_cancel = async_track_point_in_utc_time(
+            self.hass, self._handle_rollover, upcoming.time + timedelta(seconds=1)
+        )
+
+    @callback
+    def _handle_rollover(self, _now: datetime) -> None:
+        """A tide time passed: recompute states from the same data."""
+        self._rollover_cancel = None
+        if self.data is not None:
+            self._schedule_rollover(self.data, datetime.now(UTC))
+            self.async_update_listeners()
+
+    def _cancel_rollover(self) -> None:
+        if self._rollover_cancel is not None:
+            self._rollover_cancel()
+            self._rollover_cancel = None
+
+    async def async_shutdown(self) -> None:
+        """Cancel the rollover timer before shutting down."""
+        self._cancel_rollover()
+        await super().async_shutdown()
 
 
 class BuoyCoordinator(DataUpdateCoordinator[BuoyData]):
@@ -129,7 +179,7 @@ class BuoyCoordinator(DataUpdateCoordinator[BuoyData]):
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.station_id: str = entry.data[CONF_STATION_ID]
-        self.station_name: str = entry.data.get(CONF_NAME) or self.station_id
+        self.station_name: str = entry_name(entry)
         super().__init__(
             hass,
             _LOGGER,

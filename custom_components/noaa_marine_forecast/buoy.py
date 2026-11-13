@@ -71,7 +71,11 @@ def parse_realtime(text: str) -> tuple[datetime | None, dict[str, BuoyReading]]:
             if header is None:
                 header = line.lstrip("#").split()
             continue
-        rows.append(line.split())
+        fields = line.split()
+        # A truncated or malformed row must never yield a wrong number.
+        if header is None or len(fields) != len(header):
+            continue
+        rows.append(fields)
         if len(rows) >= MAX_ROWS:
             break
     if header is None or not rows:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -42,6 +42,13 @@ class ObsSensorDescription(SensorEntityDescription):
     #: Sensors are created only when this is true for the first data fetch.
     present_fn: Callable[[Any], bool]
     attributes_fn: Callable[[Any], dict[str, Any] | None] | None = None
+    #: Time the value was measured. Older than ``MAX_READING_AGE`` makes the
+    #: sensor unavailable so a dead instrument never looks current.
+    observed_fn: Callable[[Any], datetime | None] | None = None
+
+
+#: Oldest measurement still shown as a live value.
+MAX_READING_AGE = timedelta(hours=3)
 
 
 # --- diagnostics shared by tide stations and buoys ------------------------
@@ -129,6 +136,7 @@ def _reading_time(product: str) -> Callable[[TideData], datetime | None]:
 TIDE_SENSORS: tuple[ObsSensorDescription, ...] = (
     ObsSensorDescription(
         key="water_level",
+        observed_fn=_reading_time("water_level"),
         translation_key="water_level",
         device_class=SensorDeviceClass.DISTANCE,
         native_unit_of_measurement=UnitOfLength.METERS,
@@ -192,6 +200,7 @@ TIDE_SENSORS: tuple[ObsSensorDescription, ...] = (
     ),
     ObsSensorDescription(
         key="air_temperature",
+        observed_fn=_reading_time("air_temperature"),
         translation_key="air_temperature",
         device_class=SensorDeviceClass.TEMPERATURE,
         suggested_display_precision=1,
@@ -202,6 +211,7 @@ TIDE_SENSORS: tuple[ObsSensorDescription, ...] = (
     ),
     ObsSensorDescription(
         key="water_temperature",
+        observed_fn=_reading_time("water_temperature"),
         translation_key="water_temperature",
         device_class=SensorDeviceClass.TEMPERATURE,
         suggested_display_precision=1,
@@ -212,6 +222,7 @@ TIDE_SENSORS: tuple[ObsSensorDescription, ...] = (
     ),
     ObsSensorDescription(
         key="pressure",
+        observed_fn=_reading_time("air_pressure"),
         translation_key="pressure",
         device_class=SensorDeviceClass.ATMOSPHERIC_PRESSURE,
         suggested_display_precision=1,
@@ -222,6 +233,7 @@ TIDE_SENSORS: tuple[ObsSensorDescription, ...] = (
     ),
     ObsSensorDescription(
         key="wind_speed",
+        observed_fn=_reading_time("wind"),
         translation_key="wind_speed",
         device_class=SensorDeviceClass.WIND_SPEED,
         suggested_display_precision=1,
@@ -232,6 +244,7 @@ TIDE_SENSORS: tuple[ObsSensorDescription, ...] = (
     ),
     ObsSensorDescription(
         key="wind_gust",
+        observed_fn=_reading_time("wind"),
         translation_key="wind_gust",
         device_class=SensorDeviceClass.WIND_SPEED,
         suggested_display_precision=1,
@@ -242,6 +255,7 @@ TIDE_SENSORS: tuple[ObsSensorDescription, ...] = (
     ),
     ObsSensorDescription(
         key="wind_direction",
+        observed_fn=_reading_time("wind"),
         translation_key="wind_direction",
         suggested_display_precision=1,
         native_unit_of_measurement=DEGREE,
@@ -263,6 +277,14 @@ def _buoy_present(column: str) -> Callable[[BuoyData], bool]:
     return lambda data: data.value(column) is not None
 
 
+def _buoy_time(column: str) -> Callable[[BuoyData], datetime | None]:
+    def _time(data: BuoyData) -> datetime | None:
+        reading = data.readings.get(column)
+        return reading.time if reading else None
+
+    return _time
+
+
 def _buoy_attrs(column: str) -> Callable[[BuoyData], dict[str, Any] | None]:
     def _attrs(data: BuoyData) -> dict[str, Any] | None:
         reading = data.readings.get(column)
@@ -280,6 +302,7 @@ def _buoy(
         translation_key=key,
         value_fn=_buoy_value(column),
         present_fn=_buoy_present(column),
+        observed_fn=_buoy_time(column),
         attributes_fn=_buoy_attrs(column),
         state_class=SensorStateClass.MEASUREMENT,
         **kwargs,
@@ -364,6 +387,18 @@ class ObsSensor(CoordinatorEntity[DataUpdateCoordinator], SensorEntity):
         self.entity_description = description
         self._attr_unique_id = f"{entity_prefix(entry)}_{description.key}"
         self._attr_device_info = build_device_info(entry)
+
+    @property
+    def available(self) -> bool:
+        """Unavailable on a failed update or when the reading is too old."""
+        if not super().available:
+            return False
+        data = self.coordinator.data
+        observed_fn = self.entity_description.observed_fn
+        if data is None or observed_fn is None:
+            return True
+        observed = observed_fn(data)
+        return observed is not None and dt_util.utcnow() - observed <= MAX_READING_AGE
 
     @property
     def native_value(self) -> Any:

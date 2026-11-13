@@ -1,0 +1,35 @@
+{
+  "entity": {
+    "sensor": {
+      "water_level": {
+        "default": "mdi:waves"
+      },
+      "tide_state": {
+        "default": "mdi:waves",
+        "state": {
+          "rising": "mdi:wave-arrow-up",
+          "falling": "mdi:wave-arrow-down"
+        }
+      },
+      "next_tide": {
+        "default": "mdi:waves",
+        "state": {
+          "high": "mdi:wave-arrow-up",
+          "low": "mdi:wave-arrow-down"
+        }
+      },
+      "next_high_tide": {
+        "default": "mdi:wave-arrow-up"
+      },
+      "next_high_tide_level": {
+        "default": "mdi:wave-arrow-up"
+      },
+      "next_low_tide": {
+        "default": "mdi:wave-arrow-down"
+      },
+      "next_low_tide_level": {
+        "default": "mdi:wave-arrow-down"
+      }
+    }
+  }
+}

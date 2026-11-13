@@ -227,7 +227,7 @@ async def async_fetch_coops_json(hass: HomeAssistant, url: str) -> dict:
 # --- NDBC buoys ------------------------------------------------------------
 
 #: The realtime2 file holds ~45 days of rows; only the head is needed.
-NDBC_READ_BYTES = 8192
+NDBC_READ_BYTES = 4096
 
 
 def ndbc_url(station_id: str) -> str:
@@ -246,12 +246,22 @@ async def async_fetch_buoy(hass: HomeAssistant, station_id: str) -> str:
             timeout=ClientTimeout(total=REQUEST_TIMEOUT),
         ) as response:
             response.raise_for_status()
-            chunk = await response.content.read(NDBC_READ_BYTES)
+            buffer = bytearray()
+            eof = True
+            # ``read(n)`` returns whatever has arrived, so accumulate chunks.
+            async for chunk in response.content.iter_chunked(1024):
+                buffer.extend(chunk)
+                if len(buffer) >= NDBC_READ_BYTES:
+                    eof = False
+                    break
     except ClientError as err:
         raise NOAAError(f"Error requesting {url}: {err}") from err
     except TimeoutError as err:
         raise NOAAError(f"Timeout requesting {url}") from err
-    text = chunk.decode("utf-8", errors="replace")
+    if not eof:
+        # Stopped mid-file: drop the trailing partial line.
+        buffer = buffer[: buffer.rfind(b"\n") + 1]
+    text = bytes(buffer).decode("utf-8", errors="replace")
     if not text.strip():
         raise NOAAError(f"NOAA returned an empty file for {station_id.upper()}")
     return text

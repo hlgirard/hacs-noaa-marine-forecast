@@ -427,3 +427,33 @@ class TestZoneOptionsHaveNoTideFields:
         entry.add_to_hass(hass)
         flow = await hass.config_entries.options.async_init(entry.entry_id)
         assert "level_unit" not in flow["data_schema"].schema
+
+
+class TestZoneNameFromOptions:
+    async def test_options_name_renames_device(self, hass, mock_noaa) -> None:
+        from homeassistant.helpers import device_registry as dr
+
+        mock_noaa()
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            version=2,
+            data={
+                "product_type": "marine_zone",
+                CONF_ZONE_ID: ZONE,
+                CONF_NAME: ZONE_NAME,
+            },
+            unique_id=f"marine_zone:{ZONE.lower()}",
+        )
+        entry.add_to_hass(hass)
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+        flow = await hass.config_entries.options.async_init(entry.entry_id)
+        await hass.config_entries.options.async_configure(
+            flow["flow_id"], {CONF_NAME: "Harbor", CONF_SCAN_INTERVAL: 10}
+        )
+        await hass.async_block_till_done()
+        device = dr.async_get(hass).async_get_device_by_identifier(
+            (DOMAIN, ZONE.lower()), entry.entry_id
+        )
+        assert device.name == f"Harbor {ZONE}"

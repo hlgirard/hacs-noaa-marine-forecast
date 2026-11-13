@@ -57,6 +57,7 @@ def _install_stubs() -> None:
         "homeassistant.helpers",
         "homeassistant.helpers.update_coordinator",
         "homeassistant.helpers.entity_platform",
+        "homeassistant.helpers.event",
         "homeassistant.helpers.aiohttp_client",
         "homeassistant.helpers.config_validation",
         "homeassistant.util",
@@ -147,6 +148,11 @@ def _install_stubs() -> None:
     config_entries.OptionsFlow = OptionsFlow  # type: ignore[attr-defined]
     config_entries.ConfigFlowResult = dict  # type: ignore[attr-defined]
     sys.modules["homeassistant.core"].HomeAssistant = object  # type: ignore[attr-defined]
+    sys.modules["homeassistant.core"].CALLBACK_TYPE = object  # type: ignore[attr-defined]
+    sys.modules["homeassistant.core"].callback = lambda func: func  # type: ignore[attr-defined]
+    sys.modules["homeassistant.helpers.event"].async_track_point_in_utc_time = (  # type: ignore[attr-defined]
+        lambda *args, **kwargs: None
+    )
 
     dt_util = types.ModuleType("homeassistant.util.dt")
     dt_util.get_time_zone = lambda name: ZoneInfo(name)  # type: ignore[attr-defined]

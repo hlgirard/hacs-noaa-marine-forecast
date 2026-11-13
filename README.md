@@ -171,6 +171,12 @@ created from what the first successful poll returns.
 | Station ID | The configured station ID, with a `station_name` attribute (diagnostic) |
 | Checked at | Last successful poll (diagnostic) |
 
+Observation sensors (tide and buoy) become **unavailable** when their newest
+measurement is more than three hours old, so a dead instrument never looks
+current. A failed poll keeps the previous predictions and readings until then.
+The tide sensors update at each predicted high or low without waiting for the
+next poll, and `Tide state` and `Next tide` change icon with the tide.
+
 Sensor states are fetched in metric and converted by Home Assistant to your
 unit system (override per entity in its settings). Attributes are not converted
 by Home Assistant, which is why *Next tide* has its own unit option. Predicted tides cover roughly the next two days.

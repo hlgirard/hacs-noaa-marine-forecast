@@ -45,6 +45,7 @@ from .const import (
     PRODUCT_MARINE_ZONE,
 )
 from .buoy import parse_realtime
+from .device import entry_name
 from .parser import parse_forecast
 from .tides import parse_station_info
 from .products import COORDINATOR_FACTORIES
@@ -250,7 +251,7 @@ class MarineForecastOptionsFlow(OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        current = self._entry.data.get(CONF_NAME, DEFAULT_NAME)
+        current = entry_name(self._entry)
         interval = self._entry.options.get(
             CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_MINUTES
         )

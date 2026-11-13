@@ -23,6 +23,13 @@ from .const import (
 )
 
 
+def entry_name(entry: ConfigEntry) -> str:
+    """Return the display name: the options value wins over the setup value."""
+    return (
+        entry.options.get(CONF_NAME) or entry.data.get(CONF_NAME) or DEFAULT_NAME
+    )
+
+
 def entity_prefix(entry: ConfigEntry) -> str:
     """Return the lowercase id prefix used in entity unique ids.
 
@@ -39,7 +46,7 @@ def entity_prefix(entry: ConfigEntry) -> str:
 def build_device_info(entry: ConfigEntry) -> dict[str, Any]:
     """Return the device info for a config entry, by product type."""
     product_type = entry.data.get(CONF_PRODUCT_TYPE, DEFAULT_PRODUCT_TYPE)
-    name = entry.data.get(CONF_NAME) or DEFAULT_NAME
+    name = entry_name(entry)
     if product_type == PRODUCT_MARINE_ZONE:
         zone_id = entry.data[CONF_ZONE_ID]
         return {
