@@ -1,0 +1,31 @@
+{
+ "count": 1,
+ "units": null,
+ "stations": [
+  {
+   "tidal": true,
+   "greatlakes": false,
+   "shefcode": "BHBM3",
+   "state": "MA",
+   "timezone": "EST",
+   "timezonecorr": -5,
+   "observedst": true,
+   "stormsurge": false,
+   "forecast": true,
+   "outlook": true,
+   "HTFhistorical": true,
+   "HTFmonthly": true,
+   "nonNavigational": false,
+   "inundationdb": true,
+   "id": "8443970",
+   "name": "Boston",
+   "lat": 42.35389,
+   "lng": -71.05028,
+   "affiliations": "NWLON",
+   "portscode": "bh",
+   "self": "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/8443970.json",
+   "expand": "details,sensors,floodlevels,datums,harcon,tidepredoffsets,ofsmapoffsets,products,disclaimers,notices",
+   "tideType": "Mixed"
+  }
+ ]
+}

@@ -12,6 +12,7 @@ from custom_components.noaa_marine_forecast.assets import (
     FLAG_ASSETS,
     asset_path,
     load_flag_image,
+    preload_flag_images,
 )
 
 ALL_FLAGS = (
@@ -20,6 +21,35 @@ ALL_FLAGS = (
     "storm_warning",
     "hurricane_warning",
 )
+
+
+class TestPreloadRetry(unittest.TestCase):
+    def test_failed_read_is_retried_on_next_preload(self) -> None:
+        from unittest.mock import patch
+
+        from custom_components.noaa_marine_forecast import assets
+
+        assets._read_flag_image.cache_clear()
+        with patch.object(assets, "asset_path", return_value=None):
+            preload_flag_images()
+            with self.assertRaises(FileNotFoundError):
+                load_flag_image("storm_warning")
+        # The files are back: a fresh preload must not reuse the failure.
+        preload_flag_images()
+        self.assertTrue(load_flag_image("storm_warning").content)
+
+
+class TestPreload(unittest.TestCase):
+    def test_preload_fills_cache_for_every_flag(self) -> None:
+        from custom_components.noaa_marine_forecast import assets
+
+        assets._read_flag_image.cache_clear()
+        preload_flag_images()
+        self.assertEqual(
+            assets._read_flag_image.cache_info().currsize, len(assets.FLAG_ASSETS)
+        )
+        for flag in assets.FLAG_ASSETS:
+            self.assertIs(load_flag_image(flag), assets._read_flag_image(flag))
 
 
 class TestAssetMapping(unittest.TestCase):

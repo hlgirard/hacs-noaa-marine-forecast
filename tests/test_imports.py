@@ -57,6 +57,7 @@ def _install_stubs() -> None:
         "homeassistant.helpers",
         "homeassistant.helpers.update_coordinator",
         "homeassistant.helpers.entity_platform",
+        "homeassistant.helpers.event",
         "homeassistant.helpers.aiohttp_client",
         "homeassistant.helpers.config_validation",
         "homeassistant.util",
@@ -84,6 +85,7 @@ def _install_stubs() -> None:
         Optional=lambda *a, **k: None,
         All=lambda *a, **k: None,
         Coerce=lambda *a, **k: None,
+        In=lambda *a, **k: None,
         PLATFORM_SCHEMA=_Schema(),
     )
 
@@ -146,6 +148,11 @@ def _install_stubs() -> None:
     config_entries.OptionsFlow = OptionsFlow  # type: ignore[attr-defined]
     config_entries.ConfigFlowResult = dict  # type: ignore[attr-defined]
     sys.modules["homeassistant.core"].HomeAssistant = object  # type: ignore[attr-defined]
+    sys.modules["homeassistant.core"].CALLBACK_TYPE = object  # type: ignore[attr-defined]
+    sys.modules["homeassistant.core"].callback = lambda func: func  # type: ignore[attr-defined]
+    sys.modules["homeassistant.helpers.event"].async_track_point_in_utc_time = (  # type: ignore[attr-defined]
+        lambda *args, **kwargs: None
+    )
 
     dt_util = types.ModuleType("homeassistant.util.dt")
     dt_util.get_time_zone = lambda name: ZoneInfo(name)  # type: ignore[attr-defined]
@@ -160,6 +167,9 @@ def _install_stubs() -> None:
         device_class: object = None
         state_class: object = None
         entity_registry_enabled_default: bool = True
+        native_unit_of_measurement: object = None
+        suggested_display_precision: object = None
+        options: object = None
 
     sensor = sys.modules["homeassistant.components.sensor"]
     sensor.SensorEntityDescription = SensorEntityDescription  # type: ignore[attr-defined]
@@ -167,6 +177,28 @@ def _install_stubs() -> None:
     sensor.SensorDeviceClass = types.SimpleNamespace(TIMESTAMP="timestamp")  # type: ignore[attr-defined]
     sensor.SensorStateClass = types.SimpleNamespace(  # type: ignore[attr-defined]
         MEASUREMENT="measurement"
+    )
+    class _Anything:
+        """Stand-in constant namespace: any attribute is another stand-in."""
+
+        def __getattr__(self, name: str) -> "_Anything":
+            return self
+
+        def __call__(self, *args: object, **kwargs: object) -> "_Anything":
+            return self
+
+    for module_name in ("homeassistant.const", "homeassistant.components.sensor"):
+        module = sys.modules[module_name]
+        module.__getattr__ = lambda name: _Anything()  # type: ignore[attr-defined]
+    # Real values still win over the catch-all where code compares them.
+    sensor.SensorDeviceClass = types.SimpleNamespace(  # type: ignore[attr-defined]
+        TIMESTAMP="timestamp",
+        ENUM="enum",
+        DISTANCE="distance",
+        TEMPERATURE="temperature",
+        ATMOSPHERIC_PRESSURE="pressure",
+        WIND_SPEED="wind_speed",
+        DURATION="duration",
     )
     sys.modules["homeassistant.const"].EntityCategory = types.SimpleNamespace(  # type: ignore[attr-defined]
         DIAGNOSTIC="diagnostic"

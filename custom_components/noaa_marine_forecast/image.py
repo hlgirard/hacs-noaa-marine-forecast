@@ -13,8 +13,8 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
 from .alerts import format_alert_text
-from .assets import load_flag_image
-from .const import CONF_NAME, CONF_ZONE_ID, DEFAULT_NAME, DOMAIN
+from .assets import load_flag_image, preload_flag_images
+from .device import build_device_info, entity_prefix
 from .coordinator import MarineZoneData
 from .flags import FLAG_NONE, FLAG_TITLES
 
@@ -27,14 +27,10 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up the image entity for a config entry."""
-    coordinator: DataUpdateCoordinator[MarineZoneData] = (
-        hass.data[DOMAIN][entry.entry_id]
-    )
-    zone_id = entry.data[CONF_ZONE_ID]
-    name = entry.data.get(CONF_NAME) or DEFAULT_NAME
-    async_add_entities(
-        [MarineFlagImage(coordinator, hass, entry, zone_id, name)]
-    )
+    coordinator: DataUpdateCoordinator[MarineZoneData] = entry.runtime_data
+    # Read the flag files off the event loop; entity code then only hits the cache.
+    await hass.async_add_executor_job(preload_flag_images)
+    async_add_entities([MarineFlagImage(coordinator, hass, entry)])
 
 
 class MarineFlagImage(ImageEntity):
@@ -49,20 +45,12 @@ class MarineFlagImage(ImageEntity):
         coordinator: DataUpdateCoordinator[MarineZoneData],
         hass: HomeAssistant,
         entry: ConfigEntry,
-        zone_id: str,
-        name: str,
     ) -> None:
         """Initialize the image entity."""
         super().__init__(hass)
         self.coordinator = coordinator
-        self._zone_id = zone_id
-        self._attr_unique_id = f"{zone_id.lower()}_alert_flag_image"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, zone_id.lower())},
-            "name": f"{name} {zone_id}",
-            "manufacturer": "NOAA / NWS",
-            "model": "Coastal Waters Forecast",
-        }
+        self._attr_unique_id = f"{entity_prefix(entry)}_alert_flag_image"
+        self._attr_device_info = build_device_info(entry)
         self._flag = FLAG_NONE
         self._lifecycle: str | None = None
         self._asset_missing = False

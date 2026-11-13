@@ -1,12 +1,17 @@
 # NOAA Marine Forecast
 
-Home Assistant integration for NOAA coastal waters forecast text and NWS marine
-alerts, exposed as sensors and a flag image per marine zone.
+Home Assistant integration for NOAA marine data. Pick a product type when you
+add an entry:
 
-- **Forecast text**: `https://tgftp.nws.noaa.gov/data/forecasts/marine/coastal/{ab}/{zone}.txt`
-- **Active alerts**: `https://api.weather.gov/alerts/active/zone/{ZoneID}`
-- **Pending alerts**: the zone filtered alert query (NWS exposes no "pending"
-  status, so pending is derived from CAP onset/expiry timestamps)
+| Product | Source | What you get |
+| --- | --- | --- |
+| **Marine forecast zone** | NWS coastal waters forecast text and NWS alerts | Conditions, periods, alert flags, flag image |
+| **Tide station** | NOAA CO-OPS Tides & Currents API | Water level, next high/low tide, tide state, met observations |
+| **Buoy / coastal weather station** | NOAA NDBC realtime observations | Wind, waves, pressure, air and water temperature |
+
+Each entry is one location (one zone, one station or one buoy). Add as many as
+you like.
+
 
 ## Installation
 
@@ -23,49 +28,66 @@ Copy `custom_components/noaa_marine_forecast` into your Home Assistant
 
 ## Configuration
 
-**Settings → Devices & Services → Add Integration → NOAA Marine Forecast**
+**Settings → Devices & Services → Add Integration → NOAA Marine Forecast**,
+then choose a product type.
+
+### Marine forecast zone
 
 | Field | Example | Notes |
 | --- | --- | --- |
 | Marine zone ID | `ANZ230` | 6 alphanumeric characters; validated against NOAA on save |
 | Name | `NOAA Marine Forecast` | Prefix for the device name |
 
-Add one entry per marine zone. The update interval can be changed per entry via
-**Configure** (default 10 minutes, minimum 1 minute). NWS asks that clients not
-poll more often than roughly every 30 seconds.
+### Tide station
+
+| Field | Example | Notes |
+| --- | --- | --- |
+| Station ID | `8443970` | 7 digits; find yours at [tidesandcurrents.noaa.gov](https://tidesandcurrents.noaa.gov/) |
+| Name | `Boston` | Optional; defaults to the station's NOAA name |
+| Vertical datum | `MLLW` | Reference for water level and predictions. Use `IGLD` for Great Lakes stations |
+| Tide level unit | `auto` | `auto` follows Home Assistant's unit system, or choose `m` / `ft`. Applies to the `level` attribute of *Next tide*; also changeable under **Configure** |
+
+### Buoy or coastal weather station
+
+| Field | Example | Notes |
+| --- | --- | --- |
+| Station ID | `44013` | NDBC station ID (buoys such as `44013`, C-MAN stations such as `BUZM3`) |
+| Name | `NDBC 44013` | Optional |
+
+The update interval can be changed per entry via **Configure** (default
+10 minutes, minimum 1 minute). NWS asks that clients not poll more often than
+roughly every 30 seconds.
 
 ## Entities
+
+### Marine forecast zone
 
 One device per configured zone, named `<Name> <ZoneID>` (for example
 `NOAA Marine Forecast ANZ230`).
 
-### Conditions
+#### Conditions
 
 | Entity | Description |
 | --- | --- |
 | Conditions Now | The period currently in effect |
-| Conditions Next | The period immediately following Now |
-| Conditions Today | Daytime period for the issue date |
-| Conditions Tonight | Nighttime period for the issue date |
-| Conditions Tomorrow | Daytime period for the next day |
-| Conditions Tomorrow Night | Nighttime period for the next day |
+| Periods | Number of periods in the product; the `periods` attribute lists every period (`label`, `text`, `date`, `part`, `order`, `start`, `end`) for dashboards |
 
-Not every product contains every period marker. `Conditions Now` and
-`Conditions Next` are derived from the periods that are actually present, so an
-evening product that starts at `.TONIGHT...` reports Tonight as Now and the next
-period as Next. A period that is genuinely absent from the product reports
-`unknown`.
+Not every product contains every period marker. `Conditions Now` is
+derived from the periods that are actually present, so an evening product that
+starts at `.TONIGHT...` reports Tonight as Now. Individual day and night
+periods (today, tonight, tomorrow and so on) are available from the `Periods`
+sensor's attribute rather than as separate sensors.
 
-Attributes on the condition sensors:
+Attributes on `Conditions Now`:
 
 | Attribute | Description |
 | --- | --- |
 | `period_label` | Raw NOAA marker, e.g. `THIS AFTERNOON` |
 | `period_date` | Local date the period applies to |
 | `period_part` | `day` or `night` |
-| `full_text` | The complete raw NOAA product (Conditions Now only) |
-| `hazard_summary` | Hazard preamble from the product (Conditions Now only) |
-| `selection_method` | How Now was chosen (Conditions Now only) |
+| `full_text` | The complete raw NOAA product |
+| `hazard_summary` | Hazard preamble from the product |
+| `selection_method` | How Now was chosen |
 
 Because NOAA text has no explicit period timestamps, day/night boundaries are
 approximated as 06:00–18:00 local for daytime periods, 18:00–06:00 for night
@@ -73,10 +95,11 @@ periods, and 12:00–18:00 for `THIS AFTERNOON`. Selection uses the issuing
 office's time zone from the product header, so `Now` is correct for the coast
 being forecast, not just for Home Assistant's time zone.
 
-### Alerts
+#### Alerts
 
 | Entity | Description |
 | --- | --- |
+| Alert | One line alert text (all clear when nothing is in force) |
 | Alert Flags | Combined flag state, e.g. `gale_warning:active \| storm_warning:pending` |
 | Active Alerts | Count of active marine alerts |
 | Pending Alerts | Count of marine alerts that have not started yet |
@@ -114,10 +137,11 @@ rather than being reset to all clear, and `alerts_available` is set to `false`.
 A stale-but-retained flag stays available on purpose: blanking the dashboard on
 a transient API error would hide a warning that may well still be in force.
 
-### Diagnostics
+#### Diagnostics
 
 | Entity | Example |
 | --- | --- |
+| Zone ID | `ANZ230` |
 | Zone Name | `Boston Harbor` |
 | Forecast Office | `KBOX` (attribute `office_name`) |
 | Product Title | `Coastal Waters Forecast for Massachusetts and Rhode Island` |
@@ -126,6 +150,58 @@ a transient API error would hide a warning that may well still be in force.
 | Issued At | `2026-09-25T10:03:00-04:00` |
 | Expires At | `2026-09-26T03:00:00+00:00` |
 | Checked At | Last successful poll |
+
+### Tide station
+
+One device per station, named `<Name> (<StationID>)`. A station only gets the
+entities it actually reports: not every station measures water level, wind or
+pressure, so check what the station offers on its NOAA page. Entities are
+created from what the first successful poll returns.
+
+| Entity | Description |
+| --- | --- |
+| Water level | Latest observed level relative to the chosen datum (attributes `datum`, `observed_at`) |
+| Tide state | `rising` or `falling`, from the next predicted high or low |
+| Next tide | `high` or `low`; attributes `time`, `level` (in your chosen tide level unit, relative to `datum`), `level_unit`, `datum` and `display` (local time without date plus level and unit, e.g. `06:30 · 8.6 ft`) for the next predicted extreme |
+| Next high tide / Next low tide | Timestamp of the next predicted extreme |
+| Next high tide level / Next low tide level | Predicted height at that extreme |
+| Air temperature, Water temperature | Latest observation |
+| Pressure | Barometric pressure |
+| Wind speed, Wind gust, Wind direction | Latest wind observation |
+| Station ID | The configured station ID, with a `station_name` attribute (diagnostic) |
+| Checked at | Last successful poll (diagnostic) |
+
+Observation sensors (tide and buoy) become **unavailable** when their newest
+measurement is more than three hours old, so a dead instrument never looks
+current. A failed poll keeps the previous predictions and readings until then.
+The tide sensors update at each predicted high or low without waiting for the
+next poll, and `Tide state` and `Next tide` change icon with the tide.
+
+Sensor states are fetched in metric and converted by Home Assistant to your
+unit system (override per entity in its settings). Attributes are not converted
+by Home Assistant, which is why *Next tide* has its own unit option. Predicted tides cover at least the next two and a half days.
+
+### Buoy or coastal weather station
+
+One device per station, named `<Name> (<StationID>)`. Only measurements the
+station reports are created.
+
+| Entity | Description |
+| --- | --- |
+| Wind speed, Wind gust, Wind direction | Wind |
+| Wave height | Significant wave height |
+| Dominant wave period, Average wave period | Wave periods |
+| Wave direction | Mean wave direction |
+| Pressure | Sea-level pressure |
+| Air temperature, Water temperature, Dew point | Temperatures |
+| Observed at | Time of the newest observation (diagnostic) |
+| Station ID | The configured station ID, with a `station_name` attribute (diagnostic) |
+| Checked at | Last successful poll (diagnostic) |
+
+NDBC stations do not report every field on every observation (waves are often
+only on some rows), so each value comes from the newest of the last eight
+observations that contains it. Each sensor's `observed_at` attribute shows the
+time that value was measured.
 
 ## Dashboard example
 
@@ -137,9 +213,10 @@ elements:
     entity: sensor.noaa_marine_anz230_alert_flags
   - type: state
     entity: sensor.noaa_marine_anz230_conditions_now
-  - type: state
-    entity: sensor.noaa_marine_anz230_conditions_next
 ```
+
+Entity ids depend on the name you chose; check yours under
+**Settings → Devices & Services**.
 
 The image entity can also be used directly in a `picture-elements` card as the
 `entity`, which avoids hardcoding an image proxy token:
@@ -155,7 +232,12 @@ elements:
 ## Data sources
 
 - Forecast text: NOAA/NWS `tgftp` public text products.
-- Alerts: NWS public API (`api.weather.gov`). Refresh default to 10 minutes per zone.
+- Alerts: NWS public API (`api.weather.gov`) (marine forecast zones only).
+- Tides and observations: NOAA CO-OPS data API and metadata API
+  (`api.tidesandcurrents.noaa.gov`).
+- Buoys: NDBC realtime files (`www.ndbc.noaa.gov/data/realtime2/`).
+
+Each entry refreshes every 10 minutes by default.
 
 ## Development
 
@@ -168,8 +250,8 @@ make test          # or: python3 -m unittest discover -s tests -t . -v
 ```
 
 No dependencies and no Home Assistant. The forecast parser (`parser.py`), flag
-model (`flags.py`), alert normalization (`alerts.py`) and asset loading
-(`assets.py`) are free of Home Assistant imports so they can be tested
+model (`flags.py`), alert normalization (`alerts.py`), asset loading
+(`assets.py`) and the tide (`tides.py`) and buoy (`buoy.py`) parsers are free of Home Assistant imports so they can be tested
 standalone; `homeassistant`, `aiohttp` and `voluptuous` are stubbed for the
 modules that need them, so this tier also catches import and missing-name errors
 before anything is deployed.
@@ -186,7 +268,7 @@ Home Assistant install via `pytest-homeassistant-custom-component`, which is
 what exercises the paths the fast tier can only inspect statically: the
 `available` contract, state writes, image bytes, form validation and the config
 entry state machine. NOAA HTTP is mocked, so the suite is offline and
-deterministic.
+deterministic. Tide and buoy fixtures in `tests/data/` are real API captures.
 
 Home Assistant 2026.9 requires Python 3.14. `pytest-homeassistant-custom-component`
 pins an exact `homeassistant` version, so the two are upgraded together; keep

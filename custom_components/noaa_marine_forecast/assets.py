@@ -64,8 +64,26 @@ def asset_path(flag: str) -> Path | None:
 
 
 @lru_cache(maxsize=None)
+def _read_flag_image(flag: str) -> FlagImage | None:
+    """Read a flag asset from disk, caching the result (including a miss).
+
+    This does blocking file I/O. Home Assistant callers must run it in an
+    executor (see :func:`preload_flag_images`) so it never runs on the event
+    loop; afterwards every lookup is served from the cache.
+    """
+    path = asset_path(flag)
+    if path is None:
+        return None
+    try:
+        content = path.read_bytes()
+    except OSError as err:  # pragma: no cover - defensive
+        _LOGGER.error("Unable to read flag image %s: %s", path, err)
+        return None
+    return FlagImage(content, CONTENT_TYPES[path.suffix.lower()])
+
+
 def load_flag_image(flag: str) -> FlagImage:
-    """Load the image bytes for a flag key.
+    """Return the image for a flag key.
 
     Raises :class:`FileNotFoundError` when the asset is missing. There is no
     fallback image: showing a different flag would misrepresent conditions, so
@@ -73,16 +91,22 @@ def load_flag_image(flag: str) -> FlagImage:
     """
     if flag not in FLAG_ASSETS:
         raise FileNotFoundError(f"No flag image defined for {flag!r}")
-    path = asset_path(flag)
-    if path is None:
+    image = _read_flag_image(flag)
+    if image is None:
         stem = FLAG_ASSETS[flag]
         raise FileNotFoundError(
             f"No flag image asset for {flag!r} in {ASSET_DIR} "
             f"(expected {stem}.svg/.png/.jpg/.webp)"
         )
-    try:
-        content = path.read_bytes()
-    except OSError as err:  # pragma: no cover - defensive
-        _LOGGER.error("Unable to read flag image %s: %s", path, err)
-        raise FileNotFoundError(f"Unable to read flag image {path}: {err}") from err
-    return FlagImage(content, CONTENT_TYPES[path.suffix.lower()])
+    return image
+
+
+def preload_flag_images() -> None:
+    """Read every flag asset into the cache. Call from an executor.
+
+    The cache is cleared first so a reload retries assets that failed earlier
+    (for example during a file update) instead of reusing the failure.
+    """
+    _read_flag_image.cache_clear()
+    for flag in FLAG_ASSETS:
+        _read_flag_image(flag)
