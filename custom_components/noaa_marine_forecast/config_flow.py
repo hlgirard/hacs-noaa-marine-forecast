@@ -27,6 +27,7 @@ from .const import (
     PRODUCT_MARINE_ZONE,
 )
 from .parser import parse_forecast
+from .products import COORDINATOR_FACTORIES
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -67,7 +68,16 @@ class MarineForecastConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Handle the initial step."""
+        """Let the user pick a product type (skipped when only one exists)."""
+        product_types = list(COORDINATOR_FACTORIES)
+        if len(product_types) == 1:
+            return await getattr(self, f"async_step_{product_types[0]}")()
+        return self.async_show_menu(step_id="user", menu_options=product_types)
+
+    async def async_step_marine_zone(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Configure a NOAA coastal marine forecast zone."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -92,7 +102,7 @@ class MarineForecastConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
 
         return self.async_show_form(
-            step_id="user",
+            step_id=PRODUCT_MARINE_ZONE,
             data_schema=STEP_USER_SCHEMA,
             errors=errors,
             description_placeholders={"example": "ANZ230"},

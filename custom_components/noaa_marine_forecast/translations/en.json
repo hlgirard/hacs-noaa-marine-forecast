@@ -3,7 +3,14 @@
     "step": {
       "user": {
         "title": "NOAA Marine Forecast",
-        "description": "Add a NOAA coastal marine forecast zone, for example ANZ230.",
+        "description": "Choose the type of NOAA data to add.",
+        "menu_options": {
+          "marine_zone": "Marine forecast zone"
+        }
+      },
+      "marine_zone": {
+        "title": "Marine forecast zone",
+        "description": "Add a NOAA coastal marine forecast zone, for example {example}.",
         "data": {
           "zone_id": "Marine zone ID",
           "name": "Name"

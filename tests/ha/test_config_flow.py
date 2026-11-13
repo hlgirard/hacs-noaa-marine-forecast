@@ -46,7 +46,7 @@ class TestUserStep:
     async def test_shows_form(self, hass) -> None:
         result = await start_user_flow(hass)
         assert result["type"] == "form"
-        assert result["step_id"] == "user"
+        assert result["step_id"] == "marine_zone"
         assert not result["errors"]
         keys = {str(k) for k in result["data_schema"].schema}
         assert keys == {CONF_ZONE_ID, CONF_NAME}
@@ -380,3 +380,29 @@ class TestMigration:
         assert entry.data["product_type"] == "marine_zone"
         assert entry.unique_id == f"marine_zone:{ZONE.lower()}"
         assert hass.states.get("sensor.boston_harbor_anz230_zone_name")
+
+
+class TestProductMenu:
+    """The user step is a menu when several product types exist."""
+
+    async def test_single_product_skips_menu(self, hass) -> None:
+        result = await start_user_flow(hass)
+        assert result["type"] == "form"
+        assert result["step_id"] == "marine_zone"
+
+    async def test_menu_shown_for_multiple_products(self, hass, mock_noaa) -> None:
+        from unittest.mock import patch
+
+        from custom_components.noaa_marine_forecast import config_flow
+
+        mock_noaa()
+        fake = {"marine_zone": None, "other": None}
+        with patch.dict(config_flow.COORDINATOR_FACTORIES, fake, clear=True):
+            result = await start_user_flow(hass)
+            assert result["type"] == "menu"
+            assert result["menu_options"] == ["marine_zone", "other"]
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"], {"next_step_id": "marine_zone"}
+            )
+            assert result["type"] == "form"
+            assert result["step_id"] == "marine_zone"
