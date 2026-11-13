@@ -23,6 +23,8 @@ HA_MODULES = (
     "config_flow.py",
     "coordinator.py",
     "image.py",
+    "obs_coordinators.py",
+    "obs_sensor.py",
     "sensor.py",
 )
 

@@ -34,7 +34,15 @@ OTHER_ZONE = "ANZ231"
 
 
 async def start_user_flow(hass):
-    """Begin the user step and return the form result."""
+    """Begin the user step and return the marine zone form result."""
+    result = await start_menu(hass)
+    return await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "marine_zone"}
+    )
+
+
+async def start_menu(hass):
+    """Begin the user step and return the product menu."""
     return await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": "user"}
     )
@@ -383,26 +391,20 @@ class TestMigration:
 
 
 class TestProductMenu:
-    """The user step is a menu when several product types exist."""
+    """The user step is a product type menu."""
 
-    async def test_single_product_skips_menu(self, hass) -> None:
-        result = await start_user_flow(hass)
+    async def test_menu_lists_all_products(self, hass) -> None:
+        result = await start_menu(hass)
+        assert result["type"] == "menu"
+        assert result["menu_options"] == ["marine_zone", "tide_station", "buoy"]
+
+    @pytest.mark.parametrize(
+        "step", ["marine_zone", "tide_station", "buoy"]
+    )
+    async def test_each_option_shows_its_form(self, hass, step) -> None:
+        result = await start_menu(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"next_step_id": step}
+        )
         assert result["type"] == "form"
-        assert result["step_id"] == "marine_zone"
-
-    async def test_menu_shown_for_multiple_products(self, hass, mock_noaa) -> None:
-        from unittest.mock import patch
-
-        from custom_components.noaa_marine_forecast import config_flow
-
-        mock_noaa()
-        fake = {"marine_zone": None, "other": None}
-        with patch.dict(config_flow.COORDINATOR_FACTORIES, fake, clear=True):
-            result = await start_user_flow(hass)
-            assert result["type"] == "menu"
-            assert result["menu_options"] == ["marine_zone", "other"]
-            result = await hass.config_entries.flow.async_configure(
-                result["flow_id"], {"next_step_id": "marine_zone"}
-            )
-            assert result["type"] == "form"
-            assert result["step_id"] == "marine_zone"
+        assert result["step_id"] == step

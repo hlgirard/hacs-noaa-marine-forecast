@@ -23,7 +23,8 @@ from homeassistant.helpers.update_coordinator import (
 )
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN
+from .const import CONF_PRODUCT_TYPE, DOMAIN, PRODUCT_BUOY, PRODUCT_TIDE_STATION
+from .obs_sensor import BUOY_SENSORS, TIDE_SENSORS, build_obs_sensors
 from .device import build_device_info, entity_prefix
 from .coordinator import MarineZoneData
 from .flags import FLAG_TITLES
@@ -288,6 +289,13 @@ async def async_setup_entry(
 ) -> None:
     """Set up the sensors for a config entry."""
     coordinator: DataUpdateCoordinator[MarineZoneData] = entry.runtime_data
+    product_type = entry.data.get(CONF_PRODUCT_TYPE)
+    if product_type == PRODUCT_TIDE_STATION:
+        async_add_entities(build_obs_sensors(coordinator, TIDE_SENSORS, entry))
+        return
+    if product_type == PRODUCT_BUOY:
+        async_add_entities(build_obs_sensors(coordinator, BUOY_SENSORS, entry))
+        return
     entities = [
         MarineSensor(coordinator, description, entry) for description in SENSORS
     ]

@@ -24,7 +24,11 @@ EN = COMPONENT / "translations" / "en.json"
 
 #: Platform for each source file, derived from the module name. Home Assistant
 #: looks up ``entity.<platform>.<translation_key>.<attribute>``.
-PLATFORMS = {"sensor.py": "sensor", "image.py": "image"}
+PLATFORMS = {
+    "sensor.py": "sensor",
+    "obs_sensor.py": "sensor",
+    "image.py": "image",
+}
 
 
 def _load(path: Path) -> dict:
@@ -75,6 +79,13 @@ class TestTranslationKeyParity(unittest.TestCase):
             for node in ast.walk(tree):
                 # MarineSensorDescription(..., translation_key="x")
                 if isinstance(node, ast.Call):
+                    # _buoy("key", ...) helper: first arg is the translation key
+                    if (
+                        getattr(node.func, "id", None) == "_buoy"
+                        and node.args
+                        and _constant_str(node.args[0])
+                    ):
+                        found[platform].add(_constant_str(node.args[0]))
                     for kw in node.keywords:
                         if kw.arg == "translation_key":
                             value = _constant_str(kw.value)

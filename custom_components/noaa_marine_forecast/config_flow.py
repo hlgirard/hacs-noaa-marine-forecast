@@ -14,19 +14,36 @@ from homeassistant.config_entries import (
 )
 import homeassistant.helpers.config_validation as cv
 
-from .api import NOAAForecastError, async_fetch_forecast, forecast_url
+from .api import (
+    NOAAError,
+    NOAAForecastError,
+    async_fetch_buoy,
+    async_fetch_station_metadata,
+    async_fetch_forecast,
+    forecast_url,
+    normalize_buoy_station_id,
+    normalize_tide_station_id,
+)
 from .const import (
     CONF_NAME,
     CONF_PRODUCT_TYPE,
     CONF_SCAN_INTERVAL,
+    CONF_STATION_ID,
     CONF_ZONE_ID,
+    CONF_DATUM,
+    COOPS_DATUMS,
+    DEFAULT_DATUM,
+    PRODUCT_BUOY,
+    PRODUCT_TIDE_STATION,
     DEFAULT_NAME,
     DEFAULT_SCAN_INTERVAL_MINUTES,
     DOMAIN,
     MIN_SCAN_INTERVAL_MINUTES,
     PRODUCT_MARINE_ZONE,
 )
+from .buoy import parse_realtime
 from .parser import parse_forecast
+from .tides import parse_station_info
 from .products import COORDINATOR_FACTORIES
 
 _LOGGER = logging.getLogger(__name__)
@@ -35,6 +52,21 @@ STEP_USER_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_ZONE_ID): cv.string,
         vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
+    }
+)
+
+
+STEP_TIDE_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_STATION_ID): cv.string,
+        vol.Optional(CONF_NAME): cv.string,
+        vol.Optional(CONF_DATUM, default=DEFAULT_DATUM): vol.In(COOPS_DATUMS),
+    }
+)
+STEP_BUOY_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_STATION_ID): cv.string,
+        vol.Optional(CONF_NAME): cv.string,
     }
 )
 
@@ -106,6 +138,89 @@ class MarineForecastConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=STEP_USER_SCHEMA,
             errors=errors,
             description_placeholders={"example": "ANZ230"},
+        )
+
+    async def async_step_tide_station(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Configure a CO-OPS tide station."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            info = None
+            station_id = ""
+            try:
+                station_id = normalize_tide_station_id(user_input[CONF_STATION_ID])
+            except NOAAError as err:
+                _LOGGER.warning("Rejecting tide station: %s", err)
+                errors["base"] = "invalid_station"
+            else:
+                try:
+                    info = parse_station_info(
+                        await async_fetch_station_metadata(self.hass, station_id),
+                        station_id,
+                    )
+                except NOAAError as err:
+                    _LOGGER.warning("Tide station lookup failed: %s", err)
+                    errors["base"] = "cannot_connect"
+            if not errors:
+                if info is None:
+                    errors["base"] = "invalid_station"
+                else:
+                    await self.async_set_unique_id(
+                        f"{PRODUCT_TIDE_STATION}:{station_id}"
+                    )
+                    self._abort_if_unique_id_configured()
+                    name = user_input.get(CONF_NAME) or info.name
+                    self.context["title_placeholders"] = {"name": name}
+                    return self.async_create_entry(
+                        title=f"{name} tides",
+                        data={
+                            CONF_PRODUCT_TYPE: PRODUCT_TIDE_STATION,
+                            CONF_STATION_ID: station_id,
+                            CONF_NAME: name,
+                            CONF_DATUM: user_input.get(CONF_DATUM, DEFAULT_DATUM),
+                        },
+                    )
+        return self.async_show_form(
+            step_id=PRODUCT_TIDE_STATION,
+            data_schema=STEP_TIDE_SCHEMA,
+            errors=errors,
+            description_placeholders={"example": "8443970"},
+        )
+
+    async def async_step_buoy(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Configure an NDBC buoy or coastal weather station."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            try:
+                station_id = normalize_buoy_station_id(user_input[CONF_STATION_ID])
+                parse_realtime(await async_fetch_buoy(self.hass, station_id))
+            except NOAAError as err:
+                _LOGGER.warning("Rejecting buoy: %s", err)
+                errors["base"] = "invalid_station"
+            except ValueError as err:
+                _LOGGER.warning("Rejecting buoy data: %s", err)
+                errors["base"] = "invalid_station"
+            else:
+                await self.async_set_unique_id(f"{PRODUCT_BUOY}:{station_id.lower()}")
+                self._abort_if_unique_id_configured()
+                name = user_input.get(CONF_NAME) or f"NDBC {station_id}"
+                self.context["title_placeholders"] = {"name": name}
+                return self.async_create_entry(
+                    title=name,
+                    data={
+                        CONF_PRODUCT_TYPE: PRODUCT_BUOY,
+                        CONF_STATION_ID: station_id,
+                        CONF_NAME: name,
+                    },
+                )
+        return self.async_show_form(
+            step_id=PRODUCT_BUOY,
+            data_schema=STEP_BUOY_SCHEMA,
+            errors=errors,
+            description_placeholders={"example": "44013"},
         )
 
     @staticmethod

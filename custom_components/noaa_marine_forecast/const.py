@@ -14,11 +14,17 @@ CONF_PRODUCT_TYPE: Final = "product_type"
 PRODUCT_MARINE_ZONE: Final = "marine_zone"
 DEFAULT_PRODUCT_TYPE: Final = PRODUCT_MARINE_ZONE
 # Platforms forwarded for each product type.
+PRODUCT_TIDE_STATION: Final = "tide_station"
+PRODUCT_BUOY: Final = "buoy"
 PRODUCT_PLATFORMS: Final[dict[str, list[str]]] = {
     PRODUCT_MARINE_ZONE: ["sensor", "image"],
+    PRODUCT_TIDE_STATION: ["sensor"],
+    PRODUCT_BUOY: ["sensor"],
 }
 
 CONF_ZONE_ID: Final = "zone_id"
+CONF_STATION_ID: Final = "station_id"
+CONF_DATUM: Final = "datum"
 CONF_NAME: Final = "name"
 CONF_SCAN_INTERVAL: Final = "scan_interval"
 
@@ -37,6 +43,18 @@ ALERTS_ZONE_URL_TEMPLATE: Final = (
     "https://api.weather.gov/alerts?zone={zone}"
     "&status=actual&message_type=alert,update&limit=100"
 )
+
+COOPS_DATA_URL: Final = "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter"
+COOPS_STATION_URL: Final = (
+    "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/{station}.json"
+)
+COOPS_STATION_PAGE: Final = "https://tidesandcurrents.noaa.gov/stationhome.html?id={station}"
+COOPS_DATUMS: Final[list[str]] = [
+    "MLLW", "MLW", "MTL", "MSL", "MHW", "MHHW", "NAVD", "STND", "IGLD",
+]
+DEFAULT_DATUM: Final = "MLLW"
+NDBC_REALTIME_URL: Final = "https://www.ndbc.noaa.gov/data/realtime2/{station}.txt"
+NDBC_STATION_PAGE: Final = "https://www.ndbc.noaa.gov/station_page.php?station={station}"
 
 USER_AGENT: Final = (
     "hacs-noaa-marine-forecast "

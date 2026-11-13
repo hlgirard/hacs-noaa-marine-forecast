@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import logging
+import re
+from datetime import datetime
+from urllib.parse import urlencode
 
 from aiohttp import ClientError, ClientTimeout
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
+    COOPS_DATA_URL,
+    COOPS_STATION_URL,
+    NDBC_REALTIME_URL,
     ALERTS_ACTIVE_URL_TEMPLATE,
     ALERTS_ZONE_URL_TEMPLATE,
     FORECAST_URL_TEMPLATE,
@@ -123,3 +129,129 @@ def _features(payload: object) -> list[dict]:
     from .alerts import parse_alert_payload
 
     return parse_alert_payload(payload if isinstance(payload, dict) else None)
+
+
+# --- CO-OPS tide stations -------------------------------------------------
+
+_TIDE_STATION_RE = re.compile(r"^\d{7}$")
+_BUOY_STATION_RE = re.compile(r"^[A-Z0-9]{4,6}$")
+
+
+def normalize_tide_station_id(station_id: str) -> str:
+    """Return a CO-OPS station id (7 digits), raising on invalid input."""
+    candidate = (station_id or "").strip()
+    if not _TIDE_STATION_RE.match(candidate):
+        raise NOAAError(
+            f"Invalid tide station id {station_id!r}; expected 7 digits such as 8443970"
+        )
+    return candidate
+
+
+def normalize_buoy_station_id(station_id: str) -> str:
+    """Return an upper case NDBC station id, raising on invalid input."""
+    candidate = (station_id or "").strip().upper()
+    if not _BUOY_STATION_RE.match(candidate):
+        raise NOAAError(
+            f"Invalid buoy station id {station_id!r}; expected 4-6 letters or "
+            "digits such as 44013"
+        )
+    return candidate
+
+
+def coops_station_url(station_id: str) -> str:
+    """Return the CO-OPS metadata URL for a station."""
+    return COOPS_STATION_URL.format(station=normalize_tide_station_id(station_id))
+
+
+def coops_data_url(station_id: str, product: str, datum: str, **extra: str) -> str:
+    """Return a CO-OPS data API URL (metric units, GMT, JSON)."""
+    params = {
+        "product": product,
+        "station": normalize_tide_station_id(station_id),
+        "time_zone": "gmt",
+        "units": "metric",
+        "format": "json",
+        "application": "hacs-noaa-marine-forecast",
+    }
+    if product in ("water_level", "predictions"):
+        params["datum"] = datum
+    params.update(extra)
+    return f"{COOPS_DATA_URL}?{urlencode(params)}"
+
+
+def coops_latest_url(station_id: str, product: str, datum: str) -> str:
+    """URL for the latest observation of a product."""
+    return coops_data_url(station_id, product, datum, date="latest")
+
+
+def coops_predictions_url(station_id: str, datum: str, begin: datetime) -> str:
+    """URL for high/low predictions covering 72 hours from ``begin`` (UTC)."""
+    return coops_data_url(
+        station_id,
+        "predictions",
+        datum,
+        interval="hilo",
+        begin_date=begin.strftime("%Y%m%d"),
+        range="72",
+    )
+
+
+async def async_fetch_station_metadata(hass: HomeAssistant, station_id: str) -> dict:
+    """Fetch CO-OPS station metadata (404 payloads come back as dicts)."""
+    session = async_get_clientsession(hass)
+    url = coops_station_url(station_id)
+    try:
+        async with session.get(
+            url,
+            headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
+            timeout=ClientTimeout(total=REQUEST_TIMEOUT),
+        ) as response:
+            # An unknown station answers 200 with an ``errorCode`` payload,
+            # but tolerate a real 404 too.
+            if response.status == 404:
+                return {}
+            response.raise_for_status()
+            return await response.json(content_type=None)
+    except ClientError as err:
+        raise NOAAError(f"Error requesting {url}: {err}") from err
+    except TimeoutError as err:
+        raise NOAAError(f"Timeout requesting {url}") from err
+
+
+async def async_fetch_coops_json(hass: HomeAssistant, url: str) -> dict:
+    """Fetch a CO-OPS data API URL as JSON."""
+    payload = await _async_get_json(async_get_clientsession(hass), url)
+    return payload if isinstance(payload, dict) else {}
+
+
+# --- NDBC buoys ------------------------------------------------------------
+
+#: The realtime2 file holds ~45 days of rows; only the head is needed.
+NDBC_READ_BYTES = 8192
+
+
+def ndbc_url(station_id: str) -> str:
+    """Return the NDBC realtime2 URL for a station."""
+    return NDBC_REALTIME_URL.format(station=normalize_buoy_station_id(station_id))
+
+
+async def async_fetch_buoy(hass: HomeAssistant, station_id: str) -> str:
+    """Fetch the newest rows of an NDBC realtime2 file as text."""
+    session = async_get_clientsession(hass)
+    url = ndbc_url(station_id)
+    try:
+        async with session.get(
+            url,
+            headers={"User-Agent": USER_AGENT, "Accept": "text/plain"},
+            timeout=ClientTimeout(total=REQUEST_TIMEOUT),
+        ) as response:
+            response.raise_for_status()
+            chunk = await response.content.read(NDBC_READ_BYTES)
+    except ClientError as err:
+        raise NOAAError(f"Error requesting {url}: {err}") from err
+    except TimeoutError as err:
+        raise NOAAError(f"Timeout requesting {url}") from err
+    text = chunk.decode("utf-8", errors="replace")
+    if not text.strip():
+        raise NOAAError(f"NOAA returned an empty file for {station_id.upper()}")
+    return text

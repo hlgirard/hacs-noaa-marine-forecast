@@ -5,7 +5,9 @@
         "title": "NOAA Marine Forecast",
         "description": "Choose the type of NOAA data to add.",
         "menu_options": {
-          "marine_zone": "Marine forecast zone"
+          "marine_zone": "Marine forecast zone",
+          "tide_station": "Tide station",
+          "buoy": "Buoy or coastal weather station"
         }
       },
       "marine_zone": {
@@ -15,10 +17,29 @@
           "zone_id": "Marine zone ID",
           "name": "Name"
         }
+      },
+      "tide_station": {
+        "title": "Tide station",
+        "description": "Add a NOAA CO-OPS tide station by its 7-digit ID, for example {example}. Use IGLD as the datum for Great Lakes stations.",
+        "data": {
+          "station_id": "Station ID",
+          "name": "Name (optional)",
+          "datum": "Vertical datum"
+        }
+      },
+      "buoy": {
+        "title": "Buoy or coastal weather station",
+        "description": "Add an NDBC station by its ID, for example {example}.",
+        "data": {
+          "station_id": "Station ID",
+          "name": "Name (optional)"
+        }
       }
     },
     "error": {
-      "invalid_zone": "Unable to load a marine forecast for that zone. Check the zone ID and try again."
+      "invalid_zone": "Unable to load a marine forecast for that zone. Check the zone ID and try again.",
+      "invalid_station": "Unable to load data for that station. Check the station ID and try again.",
+      "cannot_connect": "Unable to reach NOAA. Try again later."
     },
     "abort": {
       "already_configured": "This marine zone is already configured."
@@ -81,6 +102,64 @@
       },
       "checked_at": {
         "name": "Checked At"
+      },
+      "water_level": {
+        "name": "Water level"
+      },
+      "tide_state": {
+        "name": "Tide state",
+        "state": {
+          "rising": "Rising",
+          "falling": "Falling"
+        }
+      },
+      "next_high_tide": {
+        "name": "Next high tide"
+      },
+      "next_high_tide_level": {
+        "name": "Next high tide level"
+      },
+      "next_low_tide": {
+        "name": "Next low tide"
+      },
+      "next_low_tide_level": {
+        "name": "Next low tide level"
+      },
+      "air_temperature": {
+        "name": "Air temperature"
+      },
+      "water_temperature": {
+        "name": "Water temperature"
+      },
+      "pressure": {
+        "name": "Pressure"
+      },
+      "wind_speed": {
+        "name": "Wind speed"
+      },
+      "wind_gust": {
+        "name": "Wind gust"
+      },
+      "wind_direction": {
+        "name": "Wind direction"
+      },
+      "wave_height": {
+        "name": "Wave height"
+      },
+      "dominant_wave_period": {
+        "name": "Dominant wave period"
+      },
+      "average_wave_period": {
+        "name": "Average wave period"
+      },
+      "wave_direction": {
+        "name": "Wave direction"
+      },
+      "dew_point": {
+        "name": "Dew point"
+      },
+      "observed_at": {
+        "name": "Observed at"
       }
     },
     "image": {
