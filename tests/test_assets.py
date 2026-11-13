@@ -12,6 +12,7 @@ from custom_components.noaa_marine_forecast.assets import (
     FLAG_ASSETS,
     asset_path,
     load_flag_image,
+    preload_flag_images,
 )
 
 ALL_FLAGS = (
@@ -20,6 +21,19 @@ ALL_FLAGS = (
     "storm_warning",
     "hurricane_warning",
 )
+
+
+class TestPreload(unittest.TestCase):
+    def test_preload_fills_cache_for_every_flag(self) -> None:
+        from custom_components.noaa_marine_forecast import assets
+
+        assets._read_flag_image.cache_clear()
+        preload_flag_images()
+        self.assertEqual(
+            assets._read_flag_image.cache_info().currsize, len(assets.FLAG_ASSETS)
+        )
+        for flag in assets.FLAG_ASSETS:
+            self.assertIs(load_flag_image(flag), assets._read_flag_image(flag))
 
 
 class TestAssetMapping(unittest.TestCase):

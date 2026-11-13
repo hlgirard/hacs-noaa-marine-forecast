@@ -357,3 +357,48 @@ class TestFullSetup:
             if e.platform == DOMAIN and e.domain == "sensor"
         ]
         assert len(sensors) == 16, f"expected 16 sensors, found {len(sensors)}"
+
+
+class TestNoBlockingIO:
+    async def test_flag_files_are_read_off_the_event_loop(
+        self, hass, mock_noaa, monkeypatch, freezer
+    ) -> None:
+        """Flag files load in an executor thread, never on the event loop."""
+        import threading
+        from pathlib import Path
+
+        from custom_components.noaa_marine_forecast import assets
+
+        reads: list[bool] = []
+        real = Path.read_bytes
+
+        def spy(self):
+            reads.append(threading.current_thread() is threading.main_thread())
+            return real(self)
+
+        assets._read_flag_image.cache_clear()
+        monkeypatch.setattr(Path, "read_bytes", spy)
+
+        # An active gale warning makes the entity load its image during setup.
+        freezer.move_to(NOW)
+        mock_noaa(
+            active=[
+                cap_alert(
+                    "Gale Warning",
+                    "g1",
+                    onset=NOW - timedelta(hours=1),
+                    ends=NOW + timedelta(hours=6),
+                )
+            ]
+        )
+        entry = MockConfigEntry(
+            domain=DOMAIN, data={CONF_ZONE_ID: ZONE, CONF_NAME: ZONE_NAME}
+        )
+        entry.add_to_hass(hass)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+        assert hass.states.get(image_entity_id(hass)).state != "unavailable"
+        flag_reads = [on_loop for on_loop in reads]
+        assert len(flag_reads) >= len(FLAG_ASSETS)
+        assert not any(flag_reads), "a flag image was read on the event loop"

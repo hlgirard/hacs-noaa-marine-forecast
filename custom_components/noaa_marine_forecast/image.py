@@ -13,7 +13,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
 from .alerts import format_alert_text
-from .assets import load_flag_image
+from .assets import load_flag_image, preload_flag_images
 from .device import build_device_info, entity_prefix
 from .coordinator import MarineZoneData
 from .flags import FLAG_NONE, FLAG_TITLES
@@ -28,6 +28,8 @@ async def async_setup_entry(
 ) -> None:
     """Set up the image entity for a config entry."""
     coordinator: DataUpdateCoordinator[MarineZoneData] = entry.runtime_data
+    # Read the flag files off the event loop; entity code then only hits the cache.
+    await hass.async_add_executor_job(preload_flag_images)
     async_add_entities([MarineFlagImage(coordinator, hass, entry)])
 
 

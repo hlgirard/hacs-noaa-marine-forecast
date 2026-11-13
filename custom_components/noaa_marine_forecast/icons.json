@@ -22,13 +22,13 @@
         "default": "mdi:wave-arrow-up"
       },
       "next_high_tide_level": {
-        "default": "mdi:wave-arrow-up"
+        "default": "mdi:waves"
       },
       "next_low_tide": {
         "default": "mdi:wave-arrow-down"
       },
       "next_low_tide_level": {
-        "default": "mdi:wave-arrow-down"
+        "default": "mdi:wave"
       }
     }
   }
