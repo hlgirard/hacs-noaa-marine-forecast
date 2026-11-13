@@ -44,6 +44,27 @@ class ObsSensorDescription(SensorEntityDescription):
     attributes_fn: Callable[[Any], dict[str, Any] | None] | None = None
 
 
+# --- diagnostics shared by tide stations and buoys ------------------------
+
+DIAGNOSTIC_SENSORS: tuple[ObsSensorDescription, ...] = (
+    ObsSensorDescription(
+        key="station_id",
+        translation_key="station_id",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: data.station_id,
+        present_fn=lambda data: True,
+        attributes_fn=lambda data: {"station_name": data.name},
+    ),
+    ObsSensorDescription(
+        key="checked_at",
+        translation_key="checked_at",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: data.fetched_at,
+        present_fn=lambda data: True,
+    ),
+)
+
 # --- tide station ---------------------------------------------------------
 
 
@@ -189,6 +210,7 @@ TIDE_SENSORS: tuple[ObsSensorDescription, ...] = (
         value_fn=_reading_value("wind", "direction"),
         present_fn=_has_reading("wind", "direction"),
     ),
+    *DIAGNOSTIC_SENSORS,
 )
 
 # --- buoy -----------------------------------------------------------------
@@ -281,7 +303,9 @@ BUOY_SENSORS: tuple[ObsSensorDescription, ...] = (
         value_fn=lambda data: data.observed_at,
         present_fn=lambda data: data.observed_at is not None,
     ),
+    *DIAGNOSTIC_SENSORS,
 )
+
 
 
 class ObsSensor(CoordinatorEntity[DataUpdateCoordinator], SensorEntity):

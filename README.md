@@ -142,6 +142,7 @@ a transient API error would hide a warning that may well still be in force.
 
 | Entity | Example |
 | --- | --- |
+| Zone ID | `ANZ230` |
 | Zone Name | `Boston Harbor` |
 | Forecast Office | `KBOX` (attribute `office_name`) |
 | Product Title | `Coastal Waters Forecast for Massachusetts and Rhode Island` |
@@ -167,6 +168,8 @@ created from what the first successful poll returns.
 | Air temperature, Water temperature | Latest observation |
 | Pressure | Barometric pressure |
 | Wind speed, Wind gust, Wind direction | Latest wind observation |
+| Station ID | The configured station ID, with a `station_name` attribute (diagnostic) |
+| Checked at | Last successful poll (diagnostic) |
 
 Values are fetched in metric and converted by Home Assistant to your unit
 system. Predicted tides cover roughly the next two days.
@@ -185,6 +188,8 @@ station reports are created.
 | Pressure | Sea-level pressure |
 | Air temperature, Water temperature, Dew point | Temperatures |
 | Observed at | Time of the newest observation (diagnostic) |
+| Station ID | The configured station ID, with a `station_name` attribute (diagnostic) |
+| Checked at | Last successful poll (diagnostic) |
 
 NDBC stations do not report every field on every observation (waves are often
 only on some rows), so each value comes from the newest of the last eight

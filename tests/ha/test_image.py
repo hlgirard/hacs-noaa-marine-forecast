@@ -356,4 +356,4 @@ class TestFullSetup:
             for e in registry.entities.values()
             if e.platform == DOMAIN and e.domain == "sensor"
         ]
-        assert len(sensors) == 15, f"expected 15 sensors, found {len(sensors)}"
+        assert len(sensors) == 16, f"expected 16 sensors, found {len(sensors)}"

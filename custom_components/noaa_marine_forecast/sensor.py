@@ -136,6 +136,12 @@ SENSORS: tuple[MarineSensorDescription, ...] = (
         attributes_fn=lambda data: _alert_detail(data),
     ),
     MarineSensorDescription(
+        key="zone_id",
+        translation_key="zone_id",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: data.zone_id,
+    ),
+    MarineSensorDescription(
         key="zone_name",
         translation_key="zone_name",
         entity_category=EntityCategory.DIAGNOSTIC,

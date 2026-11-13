@@ -143,6 +143,13 @@ class TestTideStation:
         assert float(
             hass.states.get(_entity_id(hass, prefix, "air_temperature")).state
         ) == pytest.approx(5.4)
+        station = hass.states.get(_entity_id(hass, prefix, "station_id"))
+        assert station.state == TIDE_ID
+        assert station.attributes["station_name"] == "Boston"
+        assert (
+            hass.states.get(_entity_id(hass, prefix, "checked_at")).state
+            == "2026-11-13T05:00:00+00:00"
+        )
         # Products the station did not return data for create no entities.
         assert _entity_id(hass, prefix, "wind_speed") is None
         assert _entity_id(hass, prefix, "water_temperature") is None
@@ -224,6 +231,8 @@ class TestBuoy:
         assert float(
             hass.states.get(_entity_id(hass, prefix, "pressure")).state
         ) == pytest.approx(1000.9)
+        assert hass.states.get(_entity_id(hass, prefix, "station_id")).state == BUOY_ID
+        assert _entity_id(hass, prefix, "checked_at") is not None
 
     async def test_setup_retries_on_failure(self, hass, aioclient_mock) -> None:
         aioclient_mock.get(ndbc_url(BUOY_ID), status=503)

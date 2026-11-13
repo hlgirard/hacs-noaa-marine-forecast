@@ -388,6 +388,7 @@ class TestMigration:
         assert entry.data["product_type"] == "marine_zone"
         assert entry.unique_id == f"marine_zone:{ZONE.lower()}"
         assert hass.states.get("sensor.boston_harbor_anz230_zone_name")
+        assert hass.states.get("sensor.boston_harbor_anz230_zone_id").state == ZONE
 
 
 class TestProductMenu:

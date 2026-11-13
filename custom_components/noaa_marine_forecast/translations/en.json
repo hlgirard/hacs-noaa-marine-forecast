@@ -160,6 +160,12 @@
       },
       "observed_at": {
         "name": "Observed at"
+      },
+      "zone_id": {
+        "name": "Zone ID"
+      },
+      "station_id": {
+        "name": "Station ID"
       }
     },
     "image": {
