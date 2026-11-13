@@ -74,6 +74,8 @@ async def _async_get_text(session, url: str) -> str:
         ) as response:
             response.raise_for_status()
             return await response.text()
+    except ValueError as err:  # undecodable body
+        raise NOAAForecastError(f"Unreadable response from {url}: {err}") from err
     except ClientError as err:
         raise NOAAForecastError(f"Error requesting {url}: {err}") from err
     except TimeoutError as err:
@@ -93,6 +95,8 @@ async def _async_get_json(session, url: str) -> dict:
         ) as response:
             response.raise_for_status()
             return await response.json(content_type=None)
+    except ValueError as err:  # not JSON (e.g. an HTML maintenance page)
+        raise NOAAForecastError(f"Unreadable response from {url}: {err}") from err
     except ClientError as err:
         raise NOAAForecastError(f"Error requesting {url}: {err}") from err
     except TimeoutError as err:
@@ -185,14 +189,19 @@ def coops_latest_url(station_id: str, product: str, datum: str) -> str:
 
 
 def coops_predictions_url(station_id: str, datum: str, begin: datetime) -> str:
-    """URL for high/low predictions covering 72 hours from ``begin`` (UTC)."""
+    """URL for high/low predictions from midnight UTC of ``begin``, 96 hours.
+
+    ``begin_date`` has date granularity, so the window starts at midnight of
+    the day 12 hours ago. That leaves between about 60 and 84 hours of
+    look-ahead, far more than the next tide ever needs.
+    """
     return coops_data_url(
         station_id,
         "predictions",
         datum,
         interval="hilo",
         begin_date=begin.strftime("%Y%m%d"),
-        range="72",
+        range="96",
     )
 
 
@@ -212,6 +221,8 @@ async def async_fetch_station_metadata(hass: HomeAssistant, station_id: str) -> 
                 return {}
             response.raise_for_status()
             return await response.json(content_type=None)
+    except ValueError as err:
+        raise NOAAError(f"Unreadable response from {url}: {err}") from err
     except ClientError as err:
         raise NOAAError(f"Error requesting {url}: {err}") from err
     except TimeoutError as err:

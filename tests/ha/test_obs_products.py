@@ -498,3 +498,58 @@ class TestOptionsName:
             (DOMAIN, f"buoy_{BUOY_ID}"), entry.entry_id
         )
         assert device.name == f"Offshore ({BUOY_ID})"
+
+
+class TestBadBodies:
+    async def test_tide_flow_html_body_is_cannot_connect(
+        self, hass, aioclient_mock
+    ) -> None:
+        aioclient_mock.get(
+            coops_station_url(TIDE_ID), text="<html>Maintenance</html>"
+        )
+        result = await _configure(hass, "tide_station", {CONF_STATION_ID: TIDE_ID})
+        assert result["errors"] == {"base": "cannot_connect"}
+
+    async def test_coordinator_html_bodies_retry_setup(
+        self, hass, aioclient_mock
+    ) -> None:
+        aioclient_mock.get(
+            re.compile(r".*datagetter.*"), text="<html>Maintenance</html>"
+        )
+        entry = _tide_entry(hass)
+        await hass.config_entries.async_setup(entry.entry_id)
+        assert entry.state is ConfigEntryState.SETUP_RETRY
+
+
+def test_predictions_window_always_looks_ahead_at_least_sixty_hours() -> None:
+    from datetime import datetime, timezone
+
+    from custom_components.noaa_marine_forecast.api import coops_predictions_url
+
+    for hour in range(0, 24):
+        now = datetime(2026, 11, 13, hour, 59, tzinfo=timezone.utc)
+        url = coops_predictions_url(TIDE_ID, "MLLW", now - timedelta(hours=12))
+        assert "range=96" in url
+        begin = (now - timedelta(hours=12)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        assert begin + timedelta(hours=96) - now >= timedelta(hours=60), hour
+        assert f"begin_date={begin:%Y%m%d}" in url
+
+
+class TestMigrationGuards:
+    async def test_newer_version_is_refused(self, hass) -> None:
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            version=3,
+            data={CONF_PRODUCT_TYPE: "buoy", CONF_STATION_ID: BUOY_ID},
+        )
+        entry.add_to_hass(hass)
+        await hass.config_entries.async_setup(entry.entry_id)
+        assert entry.state is ConfigEntryState.MIGRATION_ERROR
+
+    async def test_v1_entry_without_zone_is_refused(self, hass) -> None:
+        entry = MockConfigEntry(domain=DOMAIN, version=1, data={"name": "x"})
+        entry.add_to_hass(hass)
+        await hass.config_entries.async_setup(entry.entry_id)
+        assert entry.state is ConfigEntryState.MIGRATION_ERROR

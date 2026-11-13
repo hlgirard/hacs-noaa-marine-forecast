@@ -179,7 +179,7 @@ next poll, and `Tide state` and `Next tide` change icon with the tide.
 
 Sensor states are fetched in metric and converted by Home Assistant to your
 unit system (override per entity in its settings). Attributes are not converted
-by Home Assistant, which is why *Next tide* has its own unit option. Predicted tides cover roughly the next two days.
+by Home Assistant, which is why *Next tide* has its own unit option. Predicted tides cover at least the next two and a half days.
 
 ### Buoy or coastal weather station
 

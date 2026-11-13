@@ -24,8 +24,13 @@ def _platforms(entry: ConfigEntry) -> list[str]:
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Migrate old config entries (v1 had no product type)."""
+    if entry.version > 2:
+        # Created by a newer version of the integration (after a downgrade).
+        return False
     if entry.version == 1:
-        zone_id = entry.data[CONF_ZONE_ID]
+        zone_id = entry.data.get(CONF_ZONE_ID)
+        if not zone_id:
+            return False
         hass.config_entries.async_update_entry(
             entry,
             data={**entry.data, CONF_PRODUCT_TYPE: DEFAULT_PRODUCT_TYPE},

@@ -102,6 +102,11 @@ def load_flag_image(flag: str) -> FlagImage:
 
 
 def preload_flag_images() -> None:
-    """Read every flag asset into the cache. Call from an executor."""
+    """Read every flag asset into the cache. Call from an executor.
+
+    The cache is cleared first so a reload retries assets that failed earlier
+    (for example during a file update) instead of reusing the failure.
+    """
+    _read_flag_image.cache_clear()
     for flag in FLAG_ASSETS:
         _read_flag_image(flag)
