@@ -132,6 +132,12 @@ class TestTideStation:
         assert float(level.state) == pytest.approx(3.251)
         assert level.attributes["datum"] == "MLLW"
         assert hass.states.get(_entity_id(hass, prefix, "tide_state")).state == "rising"
+        nxt = hass.states.get(_entity_id(hass, prefix, "next_tide"))
+        assert nxt.state == "high"
+        assert nxt.attributes["time"].isoformat() == "2026-11-13T06:30:00+00:00"
+        assert nxt.attributes["level"] == pytest.approx(2.621)
+        assert nxt.attributes["level_unit"] == "m"
+        assert nxt.attributes["datum"] == "MLLW"
         assert (
             hass.states.get(_entity_id(hass, prefix, "next_high_tide")).state
             == "2026-11-13T06:30:00+00:00"

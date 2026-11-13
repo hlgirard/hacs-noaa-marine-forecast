@@ -98,6 +98,14 @@ class TestPredictions(unittest.TestCase):
         self.assertEqual(high.time, datetime(2026, 11, 13, 6, 30, tzinfo=UTC))
         self.assertEqual(low.time, datetime(2026, 11, 13, 12, 20, tzinfo=UTC))
 
+    def test_upcoming_tide_is_next_of_either_kind(self) -> None:
+        nxt = self.data.upcoming_tide(datetime(2026, 11, 13, 8, 0, tzinfo=UTC))
+        self.assertEqual(nxt.kind, tides.TIDE_LOW)
+        self.assertEqual(nxt.time, datetime(2026, 11, 13, 12, 20, tzinfo=UTC))
+        self.assertIsNone(
+            self.data.upcoming_tide(datetime(2026, 11, 14, 0, 0, tzinfo=UTC))
+        )
+
     def test_tide_state(self) -> None:
         self.assertEqual(
             self.data.tide_state(datetime(2026, 11, 13, 3, 0, tzinfo=UTC)), "rising"

@@ -77,6 +77,13 @@ class TideData:
                 return prediction
         return None
 
+    def upcoming_tide(self, now: datetime) -> TidePrediction | None:
+        """Return the next predicted high or low tide after ``now``."""
+        for prediction in self.predictions:
+            if prediction.time > now:
+                return prediction
+        return None
+
     def tide_state(self, now: datetime) -> str | None:
         """Return ``rising`` or ``falling`` from the next predicted extreme."""
         upcoming = [p for p in self.predictions if p.time > now]

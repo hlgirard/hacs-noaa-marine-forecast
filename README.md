@@ -12,8 +12,6 @@ add an entry:
 Each entry is one location (one zone, one station or one buoy). Add as many as
 you like.
 
-> **Beta:** tide stations and buoys are new in `0.1.0-beta.1`. Existing marine
-> zone entries are migrated automatically and keep their entities.
 
 ## Installation
 
@@ -163,6 +161,7 @@ created from what the first successful poll returns.
 | --- | --- |
 | Water level | Latest observed level relative to the chosen datum (attributes `datum`, `observed_at`) |
 | Tide state | `rising` or `falling`, from the next predicted high or low |
+| Next tide | `high` or `low`; attributes `time`, `level` (metres, relative to `datum`), `level_unit` and `datum` for the next predicted extreme |
 | Next high tide / Next low tide | Timestamp of the next predicted extreme |
 | Next high tide level / Next low tide level | Predicted height at that extreme |
 | Air temperature, Water temperature | Latest observation |

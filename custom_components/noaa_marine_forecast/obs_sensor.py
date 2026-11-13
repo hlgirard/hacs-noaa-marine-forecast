@@ -90,6 +90,26 @@ def _next_tide(kind: str, attr: str) -> Callable[[TideData], Any]:
     return _value
 
 
+def _next_tide_kind(data: TideData) -> str | None:
+    prediction = data.upcoming_tide(dt_util.utcnow())
+    if prediction is None:
+        return None
+    return "high" if prediction.kind == TIDE_HIGH else "low"
+
+
+def _next_tide_attributes(data: TideData) -> dict[str, Any] | None:
+    """Time and level of the next tide (level in metres, relative to datum)."""
+    prediction = data.upcoming_tide(dt_util.utcnow())
+    if prediction is None:
+        return None
+    return {
+        "time": prediction.time,
+        "level": prediction.value,
+        "level_unit": "m",
+        "datum": data.datum,
+    }
+
+
 def _has_predictions(data: TideData) -> bool:
     return bool(data.predictions)
 
@@ -124,6 +144,15 @@ TIDE_SENSORS: tuple[ObsSensorDescription, ...] = (
         options=["rising", "falling"],
         value_fn=lambda data: data.tide_state(dt_util.utcnow()),
         present_fn=_has_predictions,
+    ),
+    ObsSensorDescription(
+        key="next_tide",
+        translation_key="next_tide",
+        device_class=SensorDeviceClass.ENUM,
+        options=["high", "low"],
+        value_fn=_next_tide_kind,
+        present_fn=_has_predictions,
+        attributes_fn=_next_tide_attributes,
     ),
     ObsSensorDescription(
         key="next_high_tide",
